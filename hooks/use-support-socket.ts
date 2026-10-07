@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Socket } from 'socket.io-client';
-import { getToken } from '@/lib/api-client';
+import { API_BASE_URL, getToken } from '@/lib/api-client';
 import type { SupportTicketDto, SupportTicketMessageDto } from '@/lib/api/support';
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface UseSupportSocketOptions {
   /** Ticket abierto en pantalla; se sigue su hilo mientras esté montado. */
@@ -51,7 +49,7 @@ export function useSupportSocket({
       // El navegador no puede poner una cabecera Authorization en un WebSocket;
       // el token viaja en el handshake y el gateway lo verifica con el mismo
       // JwtService que el resto de la API.
-      socket = io(`${BASE_URL}/support`, {
+      socket = io(`${API_BASE_URL}/support`, {
         auth: { token },
         transports: ['websocket', 'polling'],
       });

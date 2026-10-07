@@ -1,4 +1,6 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const API_BASE_URL = (
+  process.env.NEXT_API_URL?.trim() || 'http://localhost:3001'
+).replace(/\/+$/, '');
 
 const AUTH_KEYS = [
   'access_token',
@@ -80,7 +82,7 @@ export async function apiRequest<T = unknown>(
     }
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetch(`${API_BASE_URL}/${path.replace(/^\/+/, '')}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
