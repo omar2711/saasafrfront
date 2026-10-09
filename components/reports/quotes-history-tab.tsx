@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { usePagedReport } from '@/hooks/use-paged-report';
+import { ReportPagination } from './report-pagination';
 import { Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { quotesApi, type QuoteDto, type QuoteStatus } from '@/lib/api/quotes';
+import { type QuoteDto, type QuoteStatus } from '@/lib/api/quotes';
 import { useOrganization } from '@/contexts/organization-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ExportButtons } from '@/components/reports/export-buttons';
@@ -40,43 +42,28 @@ const STATUS_MAP: Record<QuoteStatus, { status: 'draft' | 'pending' | 'success' 
 
 export function QuotesHistoryTab() {
   const { branches } = useOrganization();
-  const [quotes, setQuotes] = useState<QuoteDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await quotesApi.list({
-        branchId: branchFilter === 'all' ? undefined : branchFilter,
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
-        dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
-      });
-      setQuotes(data);
-    } catch {
-      setError('No se pudo cargar el historial de cotizaciones');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [branchFilter, statusFilter, dateFrom, dateTo]);
+  const { rows: quotes, summary, page, setPage, isLoading, error, exportAll } = usePagedReport<QuoteDto>(
+    '/operations/quotes', '/operations/reports/quotes/summary', {
+      branchId: branchFilter === 'all' ? undefined : branchFilter,
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
+      dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
+    });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
 
   const getBranchName = (id: string) => branches.find((b) => b.id === id)?.name ?? '—';
 
-  const conversionRate = quotes.length > 0
-    ? Math.round((quotes.filter((q) => q.status === 'converted').length / quotes.length) * 100)
-    : 0;
+  const conversionRate = summary.totalRecords > 0
+    ? Math.round(((summary.convertedCount ?? 0) / summary.totalRecords) * 100) : 0;
 
-  const buildDataset = (): ExportDataset<QuoteDto> => ({
+  const buildDataset = async (): Promise<ExportDataset<QuoteDto>> => {
+    const allRows = await exportAll();
+    return ({
     title: 'Historial de cotizaciones',
     subtitle: describeFilters({
       Desde: dateFrom,
@@ -93,12 +80,13 @@ export function QuotesHistoryTab() {
       { header: 'Estado', value: (q) => STATUS_MAP[q.status].label },
       { header: 'Fecha', value: (q) => formatDate(q.createdAt) },
     ],
-    rows: quotes,
+    rows: allRows,
     summary: [
-      { label: 'Cotizaciones listadas', value: String(quotes.length) },
-      { label: 'Tasa de conversión', value: `${conversionRate}%` },
+      { label: 'Cotizaciones listadas', value: String(allRows.length) },
+      { label: 'Tasa de conversión', value: `${allRows.length ? Math.round(allRows.filter(q => q.status === 'converted').length / allRows.length * 100) : 0}%` },
     ],
-  });
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -137,13 +125,15 @@ export function QuotesHistoryTab() {
           <span className="text-sm text-muted-foreground">
             Tasa de conversion: <span className="font-semibold text-foreground">{conversionRate}%</span>
           </span>
-          <ExportButtons buildDataset={buildDataset} disabled={isLoading || quotes.length === 0} />
+          <ExportButtons buildDataset={buildDataset} disabled={isLoading || summary.totalRecords === 0} />
         </div>
       </div>
 
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
+
+      <ReportPagination page={page} total={summary.totalRecords} loading={isLoading} onChange={setPage} />
 
       <Card>
         <CardContent className="p-0">

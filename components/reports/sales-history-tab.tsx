@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { usePagedReport } from '@/hooks/use-paged-report';
+import { ReportPagination } from './report-pagination';
 import { Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { salesApi, type SaleDto, type SaleStatus } from '@/lib/api/sales';
+import { type SaleDto, type SaleStatus } from '@/lib/api/sales';
 import { useOrganization } from '@/contexts/organization-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ExportButtons } from '@/components/reports/export-buttons';
@@ -38,43 +40,27 @@ const STATUS_MAP: Record<SaleStatus, { status: 'draft' | 'success' | 'inactive' 
 
 export function SalesHistoryTab() {
   const { branches } = useOrganization();
-  const [sales, setSales] = useState<SaleDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await salesApi.list({
-        branchId: branchFilter === 'all' ? undefined : branchFilter,
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
-        dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
-      });
-      setSales(data);
-    } catch {
-      setError('No se pudo cargar el historial de ventas');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [branchFilter, statusFilter, dateFrom, dateTo]);
+  const { rows: sales, summary, page, setPage, isLoading, error, exportAll } = usePagedReport<SaleDto>(
+    '/operations/sales', '/operations/reports/sales/summary', {
+      branchId: branchFilter === 'all' ? undefined : branchFilter,
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
+      dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
+    });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
 
   const getBranchName = (id: string) => branches.find((b) => b.id === id)?.name ?? '—';
 
-  const totalRevenue = sales
-    .filter((s) => s.status === 'completed')
-    .reduce((sum, s) => sum + s.total, 0);
+  const totalRevenue = summary.revenue ?? 0;
 
-  const buildDataset = (): ExportDataset<SaleDto> => ({
+  const buildDataset = async (): Promise<ExportDataset<SaleDto>> => {
+    const allRows = await exportAll();
+    return ({
     title: 'Historial de ventas',
     subtitle: describeFilters({
       Desde: dateFrom,
@@ -91,12 +77,13 @@ export function SalesHistoryTab() {
       { header: 'Estado', value: (s) => STATUS_MAP[s.status].label },
       { header: 'Fecha', value: (s) => formatDate(s.createdAt) },
     ],
-    rows: sales,
+    rows: allRows,
     summary: [
-      { label: 'Ventas listadas', value: String(sales.length) },
-      { label: 'Total facturado (completadas)', value: formatCurrency(totalRevenue) },
+      { label: 'Ventas listadas', value: String(allRows.length) },
+      { label: 'Total facturado (completadas)', value: formatCurrency(allRows.filter(s => s.status === 'completed').reduce((sum, s) => sum + s.total, 0)) },
     ],
-  });
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -136,13 +123,15 @@ export function SalesHistoryTab() {
             Total facturado (completadas):{' '}
             <span className="font-semibold text-foreground">{formatCurrency(totalRevenue)}</span>
           </span>
-          <ExportButtons buildDataset={buildDataset} disabled={isLoading || sales.length === 0} />
+          <ExportButtons buildDataset={buildDataset} disabled={isLoading || summary.totalRecords === 0} />
         </div>
       </div>
 
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
+
+      <ReportPagination page={page} total={summary.totalRecords} loading={isLoading} onChange={setPage} />
 
       <Card>
         <CardContent className="p-0">

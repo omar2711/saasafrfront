@@ -1,4 +1,6 @@
 import { apiRequest } from '@/lib/api-client';
+import { listPath, listAllPages } from './pagination';
+export interface ProductFilters { search?: string; status?: string; limit?: number; offset?: number; }
 
 export interface ProductDto {
   id: string;
@@ -41,7 +43,8 @@ export interface UpdateProductPayload extends Partial<CreateProductPayload> {
 }
 
 export const productsApi = {
-  list: () => apiRequest<ProductDto[]>('/operations/products'),
+  list: () => listAllPages<ProductDto>('/operations/products', {}, true),
+  listPage: (filters: ProductFilters = {}) => apiRequest<ProductDto[]>(listPath('/operations/products', { limit: 100, ...filters })),
 
   create: (payload: CreateProductPayload) =>
     apiRequest<ProductDto>('/operations/products', { method: 'POST', body: payload }),

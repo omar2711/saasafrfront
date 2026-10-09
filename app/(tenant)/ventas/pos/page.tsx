@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useLiveApiEffect } from '@/hooks/use-live-api-effect';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
   Search,
   Plus,
@@ -57,6 +59,9 @@ export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const catalogSearch = useDebouncedValue(searchQuery);
+  const [catalogPage, setCatalogPage] = useState(0);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [saleError, setSaleError] = useState<string | null>(null);
   const [lastSaleNumber, setLastSaleNumber] = useState<string | null>(null);
@@ -72,28 +77,20 @@ export default function POSPage() {
   const [withInvoice, setWithInvoice] = useState(false);
   const [returnToConfirmation, setReturnToConfirmation] = useState(false);
 
-  useEffect(() => {
-    productsApi.list().then(prods =>
-      setProducts(prods.filter(p => p.status === 'active'))
-    ).catch(() => {});
-    kitsApi.list().then(list =>
-      setKits(list.filter(k => k.status === 'active'))
-    ).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    inventoryApi.listStock(currentBranch?.id).then((stocks) => {
+  const loadCatalog = useCallback(async (isCurrent: () => boolean) => {
+    if (!currentBranch?.id || !organization?.id) return;
+    try {
+      const [prods, list, stocks, prices] = await Promise.all([
+        productsApi.listPage({ search: catalogSearch, status: 'active', limit: 101, offset: catalogPage * 100 }), kitsApi.list(), inventoryApi.listStock(currentBranch.id),
+        pricingApi.listByBranch(currentBranch.id),
+      ]);
+      if (!isCurrent()) return;
+      setProducts(prods.slice(0, 100));
+      setHasMoreProducts(prods.length > 100);
+      setKits(list.filter(k => k.status === 'active'));
       const sm: Record<string, number> = {};
-      stocks.forEach((s) => { sm[s.productId] = s.quantityOnHand; });
+      stocks.forEach(s => { sm[s.productId] = s.quantityOnHand; });
       setStockMap(sm);
-    }).catch(() => {});
-  }, [currentBranch]);
-
-  // El POS vendia siempre al precio global, ignorando los overrides por sucursal
-  // que ya existen en product_branch_prices.
-  useEffect(() => {
-    if (!currentBranch) { setBranchPriceMap({}); return; }
-    pricingApi.listByBranch(currentBranch.id).then((prices) => {
       const pm: Record<string, number> = {};
       const bounds: Record<string, PriceBounds> = {};
       prices.forEach((p) => {
@@ -102,8 +99,11 @@ export default function POSPage() {
       });
       setBranchPriceMap(pm);
       setPriceBoundsMap(bounds);
-    }).catch(() => { setBranchPriceMap({}); setPriceBoundsMap({}); });
-  }, [currentBranch]);
+    } catch {
+      if (isCurrent()) setSaleError('No se pudo actualizar el catálogo, stock o precios.');
+    }
+  }, [currentBranch?.id, organization?.id, catalogSearch, catalogPage]);
+  useLiveApiEffect(loadCatalog, 10000);
 
   const getEffectivePrice = (product: ProductDto) =>
     branchPriceMap[product.id] ?? product.salePrice;
@@ -422,7 +422,7 @@ export default function POSPage() {
               placeholder={catalogView === 'products' ? 'Buscar producto por nombre o identificador...' : 'Buscar kit por nombre o identificador...'}
               className="pl-9"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setCatalogPage(0); }}
             />
           </div>
           <div className="flex rounded-md border overflow-hidden">
@@ -513,6 +513,13 @@ export default function POSPage() {
             </div>
           )}
         </ScrollArea>
+        {catalogView === 'products' && <div className="flex items-center justify-between gap-2 pt-2">
+          <span className="text-sm text-muted-foreground">Página {catalogPage + 1}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={catalogPage === 0} onClick={() => setCatalogPage(p => p - 1)}>Anterior</Button>
+            <Button variant="outline" size="sm" disabled={!hasMoreProducts} onClick={() => setCatalogPage(p => p + 1)}>Siguiente</Button>
+          </div>
+        </div>}
       </div>
 
       {/* Cart Section */}

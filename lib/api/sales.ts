@@ -132,12 +132,14 @@ export interface CreateSalePayload {
 }
 
 export const salesApi = {
-  list: (params?: { branchId?: string; status?: string; dateFrom?: string; dateTo?: string }) => {
+  list: (params?: { branchId?: string; status?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
     const query = new URLSearchParams();
     if (params?.branchId) query.set('branchId', params.branchId);
     if (params?.status) query.set('status', params.status);
     if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
     if (params?.dateTo) query.set('dateTo', params.dateTo);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.offset !== undefined) query.set('offset', String(params.offset));
     const qs = query.toString() ? `?${query.toString()}` : '';
     return apiRequest<SaleDto[]>(`/operations/sales${qs}`);
   },

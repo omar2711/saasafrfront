@@ -68,6 +68,8 @@ export const inventoryApi = {
   },
 
   listMovements: (params?: {
+    limit?: number;
+    offset?: number;
     branchId?: string;
     productId?: string;
     movementType?: string;
@@ -80,6 +82,8 @@ export const inventoryApi = {
     if (params?.movementType) query.set('movementType', params.movementType);
     if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
     if (params?.dateTo) query.set('dateTo', params.dateTo);
+    if (params?.limit !== undefined) query.set('limit', String(params.limit));
+    if (params?.offset !== undefined) query.set('offset', String(params.offset));
     const qs = query.toString() ? `?${query.toString()}` : '';
     return apiRequest<MovementDto[]>(`/operations/inventory/movements${qs}`);
   },

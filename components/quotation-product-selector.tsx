@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import { useLiveApiEffect } from '@/hooks/use-live-api-effect';
 import { Search, Plus, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,7 +54,7 @@ export function QuotationProductSelector({
   onRemoveItem,
   onUpdateItem,
 }: ProductSelectorProps) {
-  const { currentBranch, hasPermission } = useOrganization();
+  const { currentBranch, organization, hasPermission } = useOrganization();
   const canOverridePrice = hasPermission('sales.price_override');
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [kits, setKits] = useState<KitDto[]>([]);
@@ -65,13 +66,16 @@ export function QuotationProductSelector({
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [pricingMap, setPricingMap] = useState<Record<string, BranchPricing>>({});
 
-  useEffect(() => {
-    Promise.all([
+  const loadCatalog = useCallback(async (isCurrent: () => boolean) => {
+    if (!currentBranch?.id || !organization?.id) return;
+    try {
+    const [productList, stocks, kitList, prices] = await Promise.all([
       productsApi.list(),
-      inventoryApi.listStock(currentBranch?.id),
+      inventoryApi.listStock(currentBranch.id),
       kitsApi.list(),
-    ])
-      .then(([productList, stocks, kitList]) => {
+      pricingApi.listByBranch(currentBranch.id),
+    ]);
+        if (!isCurrent()) return;
         setProducts(productList);
         const sm: Record<string, StockInfo> = {};
         stocks.forEach(s => {
@@ -79,17 +83,6 @@ export function QuotationProductSelector({
         });
         setStockMap(sm);
         setKits(kitList.filter((k) => k.status === 'active'));
-      })
-      .catch(() => {});
-  }, [currentBranch]);
-
-  // Cotizar al precio global ignoraba los overrides de product_branch_prices,
-  // el mismo fallo que ya se corrigio en el POS. Ademas de aqui sale el rango
-  // que el backend va a exigir al guardar.
-  useEffect(() => {
-    if (!currentBranch) { setPricingMap({}); return; }
-    pricingApi.listByBranch(currentBranch.id)
-      .then((prices) => {
         const map: Record<string, BranchPricing> = {};
         prices.forEach((price) => {
           map[price.productId] = {
@@ -99,9 +92,9 @@ export function QuotationProductSelector({
           };
         });
         setPricingMap(map);
-      })
-      .catch(() => setPricingMap({}));
-  }, [currentBranch]);
+    } catch { /* Keep last successful data; server validates stock and prices on save. */ }
+  }, [currentBranch?.id, organization?.id]);
+  useLiveApiEffect(loadCatalog, 10000);
 
   const getEffectivePrice = (product: ProductDto) =>
     pricingMap[product.id]?.salePrice ?? product.salePrice;

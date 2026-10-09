@@ -1,4 +1,39 @@
+import { QueryCache } from './query-cache';
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const queryCache = new QueryCache();
+const CACHE_EVENT = 'afr:api-invalidated';
+const STORAGE_EVENT_KEY = 'afr:api-invalidation';
+let listening = false;
+
+function initializeCacheEvents() {
+  if (listening || typeof window === 'undefined') return;
+  listening = true;
+  try { queryCache.setStorage(window.sessionStorage); } catch { /* private mode: memory only */ }
+  window.addEventListener('storage', event => {
+    if (event.key !== STORAGE_EVENT_KEY || !event.newValue) return;
+    try {
+      const { tenant } = JSON.parse(event.newValue);
+      queryCache.clear(tenant ?? undefined);
+      window.dispatchEvent(new Event(CACHE_EVENT));
+    } catch { /* Ignore unrelated or malformed storage events. */ }
+  });
+}
+
+export function invalidateApiCache(tenant = getTenantId()) {
+  queryCache.clear(tenant ?? undefined);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(CACHE_EVENT));
+    // Only invalidation metadata crosses tabs; no credentials or response data.
+    try { localStorage.setItem(STORAGE_EVENT_KEY, JSON.stringify({ tenant, nonce: crypto.randomUUID() })); } catch { /* storage disabled */ }
+  }
+}
+export function getApiCacheRevision() { return queryCache.revision; }
+
+export function subscribeApiInvalidation(listener: () => void) {
+  initializeCacheEvents();
+  window.addEventListener(CACHE_EVENT, listener);
+  return () => window.removeEventListener(CACHE_EVENT, listener);
+}
 
 const AUTH_KEYS = [
   'access_token',
@@ -25,11 +60,14 @@ export function getIsSuperAdmin(): boolean {
 }
 
 export function setAuth(token: string, tenantId: string) {
+  queryCache.clear();
   localStorage.setItem('access_token', token);
   localStorage.setItem('tenant_id', tenantId);
 }
 
 export function clearAuth() {
+  invalidateApiCache();
+  queryCache.clear();
   AUTH_KEYS.forEach((key) => localStorage.removeItem(key));
 }
 
@@ -37,6 +75,7 @@ interface RequestOptions {
   method?: string;
   body?: unknown;
   requiresTenant?: boolean;
+  cache?: boolean;
 }
 
 /**
@@ -63,45 +102,64 @@ export async function apiRequest<T = unknown>(
   options: RequestOptions = {},
 ): Promise<T> {
   const { method = 'GET', body, requiresTenant = true } = options;
+  initializeCacheEvents();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
+  if (options.cache === false) headers['x-cache-bypass'] = '1';
 
   const token = getToken();
+  const tenantId = requiresTenant ? getTenantId() : null;
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
   if (requiresTenant) {
-    const tenantId = getTenantId();
     if (tenantId) {
       headers['x-tenant-id'] = tenantId;
     }
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const load = async (): Promise<T> => {
+    const response = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: 'no-store',
+    });
 
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({ message: response.statusText }));
-    const message = Array.isArray(errorBody?.message)
-      ? errorBody.message.join(' ')
-      : errorBody?.message;
-    throw new ApiError(
-      message ?? `Request failed: ${response.status}`,
-      response.status,
-      errorBody?.code ?? `HTTP_${response.status}`,
-      Array.isArray(errorBody?.details) ? errorBody.details : [],
-    );
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+      const message = Array.isArray(errorBody?.message)
+        ? errorBody.message.join(' ')
+        : errorBody?.message;
+      throw new ApiError(
+        message ?? `Request failed: ${response.status}`,
+        response.status,
+        errorBody?.code ?? `HTTP_${response.status}`,
+        Array.isArray(errorBody?.details) ? errorBody.details : [],
+      );
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return response.json() as Promise<T>;
+  };
+  if (method !== 'GET') {
+    try { return await load(); }
+    finally { invalidateApiCache(tenantId); }
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
+  const url = new URL(path, 'http://internal');
+  url.searchParams.sort();
+  const ttl = url.pathname.includes('/stock') ? 3000 : url.pathname.includes('/pricing') ? 10000
+    : /\/(products|kits|categories)(\/|$)/.test(url.pathname) ? 60000 : 15000;
+  if (options.cache === false || !token || !tenantId || !path.startsWith('/operations/')) return load();
+  const rawKey = JSON.stringify([BASE_URL, token, tenantId, url.pathname + url.search]);
+  // Persist only a one-way digest of the authenticated scope, not the token.
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey));
+  const key = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  return queryCache.read(key, tenantId, ttl, load);
 }

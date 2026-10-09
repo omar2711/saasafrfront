@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { usePagedReport } from '@/hooks/use-paged-report';
+import { ReportPagination } from './report-pagination';
 import { Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,37 +34,23 @@ const isNegative = (type: MovementDto['movementType']) => NEGATIVE_MOVEMENT_TYPE
 
 export function InventoryHistoryTab() {
   const { branches } = useOrganization();
-  const [movements, setMovements] = useState<MovementDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError('');
-    try {
-      const data = await inventoryApi.listMovements({
-        branchId: branchFilter === 'all' ? undefined : branchFilter,
-        movementType: typeFilter === 'all' ? undefined : typeFilter,
-        dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
-        dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
-      });
-      setMovements(data);
-    } catch {
-      setError('No se pudo cargar el historial de inventario');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [branchFilter, typeFilter, dateFrom, dateTo]);
+  const { rows: movements, summary, page, setPage, isLoading, error, exportAll } = usePagedReport<MovementDto>(
+    '/operations/inventory/movements', '/operations/reports/inventory/summary', {
+      branchId: branchFilter === 'all' ? undefined : branchFilter,
+      movementType: typeFilter === 'all' ? undefined : typeFilter,
+      dateFrom: dateFrom ? new Date(dateFrom).toISOString() : undefined,
+      dateTo: dateTo ? new Date(dateTo + 'T23:59:59').toISOString() : undefined,
+    });
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
 
-  const buildDataset = (): ExportDataset<MovementDto> => ({
+  const buildDataset = async (): Promise<ExportDataset<MovementDto>> => {
+    const allRows = await exportAll();
+    return ({
     title: 'Historial de inventario',
     subtitle: describeFilters({
       Desde: dateFrom,
@@ -80,9 +68,10 @@ export function InventoryHistoryTab() {
       { header: 'Costo total', value: (m) => (m.totalCost != null ? m.totalCost : ''), align: 'right' },
       { header: 'Fecha', value: (m) => formatDateTime(m.createdAt) },
     ],
-    rows: movements,
-    summary: [{ label: 'Movimientos', value: String(movements.length) }],
-  });
+    rows: allRows,
+    summary: [{ label: 'Movimientos', value: String(allRows.length) }],
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -118,13 +107,15 @@ export function InventoryHistoryTab() {
           </Select>
         </div>
         <div className="ml-auto">
-          <ExportButtons buildDataset={buildDataset} disabled={isLoading || movements.length === 0} />
+          <ExportButtons buildDataset={buildDataset} disabled={isLoading || summary.totalRecords === 0} />
         </div>
       </div>
 
       {error && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
+
+      <ReportPagination page={page} total={summary.totalRecords} loading={isLoading} onChange={setPage} />
 
       <Card>
         <CardContent className="p-0">

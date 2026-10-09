@@ -7,6 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { QuotationProductSelector, type QuoteLineItem } from './quotation-product-selector';
 import { Badge } from '@/components/ui/badge';
+import { CountryCodeCombobox } from '@/components/country-code-combobox';
+import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
+import { joinPhone } from '@/lib/utils/phone';
 
 export interface QuotationFormData {
   clientName: string;
@@ -28,6 +31,7 @@ interface QuotationFormProps {
 const TAX_RATE = 0.16; // 16% VAT (IVA)
 
 export function QuotationForm({ onSubmit, isLoading = false }: QuotationFormProps) {
+  const [phoneCountryCode, setPhoneCountryCode] = useState(DEFAULT_DIAL_CODE);
   const [formData, setFormData] = useState<QuotationFormData>({
     clientName: '',
     clientCompany: '',
@@ -79,12 +83,12 @@ export function QuotationForm({ onSubmit, isLoading = false }: QuotationFormProp
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.clientName || !formData.clientPhone || !formData.items.length) {
+    if (!formData.clientName.trim() || !formData.clientPhone.trim() || !formData.items.length) {
       alert('Por favor completa todos los campos requeridos y agrega al menos un producto');
       return;
     }
 
-    onSubmit(formData);
+    onSubmit({ ...formData, clientPhone: joinPhone(phoneCountryCode, formData.clientPhone) });
   };
 
   return (
@@ -123,13 +127,24 @@ export function QuotationForm({ onSubmit, isLoading = false }: QuotationFormProp
             </div>
             <div>
               <label className="text-sm font-medium">Teléfono *</label>
-              <Input
-                required
-                type="tel"
-                value={formData.clientPhone}
-                onChange={(e) => handleFieldChange('clientPhone', e.target.value)}
-                placeholder="Ej: +52 55 1234 5678"
-              />
+              <div className="flex gap-2">
+                <CountryCodeCombobox
+                  value={phoneCountryCode}
+                  onChange={setPhoneCountryCode}
+                  disabled={isLoading}
+                />
+                <Input
+                  required
+                  type="tel"
+                  aria-label="Número de teléfono del cliente"
+                  autoComplete="tel-national"
+                  value={formData.clientPhone}
+                  onChange={(e) => handleFieldChange('clientPhone', e.target.value)}
+                  placeholder="Ej: 70000000"
+                  className="min-w-0"
+                  disabled={isLoading}
+                />
+              </div>
             </div>
             <div>
               <label className="text-sm font-medium">Email</label>

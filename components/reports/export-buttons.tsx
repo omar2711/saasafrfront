@@ -11,7 +11,7 @@ interface ExportButtonsProps<T> {
    * cada render costaría recorrer todas las filas por cada tecla escrita en un
    * filtro.
    */
-  buildDataset: () => ExportDataset<T>;
+  buildDataset: () => ExportDataset<T> | Promise<ExportDataset<T>>;
   disabled?: boolean;
 }
 
@@ -25,7 +25,7 @@ export function ExportButtons<T>({ buildDataset, disabled }: ExportButtonsProps<
     setPending(format);
     setError('');
     try {
-      const dataset = buildDataset();
+      const dataset = await buildDataset();
       // El import dinámico vive aquí dentro: jspdf (~380 KB) y SheetJS (~430 KB)
       // no pueden entrar en el bundle inicial de una app que carga en el POS.
       if (format === 'pdf') {
@@ -35,8 +35,8 @@ export function ExportButtons<T>({ buildDataset, disabled }: ExportButtonsProps<
         const { exportToExcel } = await import('@/lib/export/excel');
         await exportToExcel(dataset);
       }
-    } catch {
-      setError('No se pudo generar el archivo');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo generar el archivo');
     } finally {
       setPending(null);
     }
