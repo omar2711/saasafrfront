@@ -1,5 +1,7 @@
 import { QueryCache } from './query-cache';
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const API_BASE_URL = (
+  process.env.NEXT_API_URL?.trim() || process.env.NEXT_PUBLIC_API_URL?.trim() || 'http://localhost:3001'
+).replace(/\/+$/, '');
 const queryCache = new QueryCache();
 const CACHE_EVENT = 'afr:api-invalidated';
 const STORAGE_EVENT_KEY = 'afr:api-invalidation';
@@ -122,7 +124,7 @@ export async function apiRequest<T = unknown>(
   }
 
   const load = async (): Promise<T> => {
-    const response = await fetch(`${BASE_URL}${path}`, {
+    const response = await fetch(`${API_BASE_URL}/${path.replace(/^\/+/, '')}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -157,7 +159,7 @@ export async function apiRequest<T = unknown>(
   const ttl = url.pathname.includes('/stock') ? 3000 : url.pathname.includes('/pricing') ? 10000
     : /\/(products|kits|categories)(\/|$)/.test(url.pathname) ? 60000 : 15000;
   if (options.cache === false || !token || !tenantId || !path.startsWith('/operations/')) return load();
-  const rawKey = JSON.stringify([BASE_URL, token, tenantId, url.pathname + url.search]);
+  const rawKey = JSON.stringify([API_BASE_URL, token, tenantId, url.pathname + url.search]);
   // Persist only a one-way digest of the authenticated scope, not the token.
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey));
   const key = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');

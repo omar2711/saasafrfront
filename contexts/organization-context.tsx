@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Organization, Branch, User } from '@/types';
-import { getToken, getTenantId, clearAuth, setAuth } from '@/lib/api-client';
+import { API_BASE_URL, getToken, getTenantId, clearAuth, setAuth } from '@/lib/api-client';
 import { organizationsApi, type OrgDto, type BranchDto } from '@/lib/api/organizations';
 import { setOrgTimeZone } from '@/lib/format';
 
@@ -87,7 +87,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     const sessionId = localStorage.getItem('session_id');
     if (sessionId) {
-      void fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'}/auth/logout`, {
+      void fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
