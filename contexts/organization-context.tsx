@@ -12,6 +12,8 @@ import type { Organization, Branch, User } from '@/types';
 import { API_BASE_URL, getToken, getTenantId, clearAuth, setAuth } from '@/lib/api-client';
 import { organizationsApi, type OrgDto, type BranchDto } from '@/lib/api/organizations';
 import { setOrgTimeZone } from '@/lib/format';
+import { useIdleLogout } from '@/hooks/use-idle-logout';
+import { Clock } from 'lucide-react';
 
 interface OrganizationContextType {
   organization: Organization | null;
@@ -96,9 +98,12 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ sessionId }),
       }).catch(() => {});
     }
+    localStorage.removeItem('last_activity');
     clearAuth();
     window.location.href = '/login';
   }, []);
+
+  const { warning, secondsLeft, stay } = useIdleLogout(logout);
 
   useEffect(() => {
     const token = getToken();
@@ -217,6 +222,49 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      {warning && (
+        <div
+          role="alertdialog"
+          aria-live="assertive"
+          className="fixed bottom-6 right-6 z-50 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-amber-500/30 bg-background shadow-2xl animate-in fade-in slide-in-from-bottom-4"
+        >
+          <div className="flex items-start gap-3 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">¿Sigues ahí?</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Por seguridad, tu sesión se cerrará en{' '}
+                <span className="font-semibold tabular-nums text-foreground">{secondsLeft} s</span>{' '}
+                por inactividad.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 px-4 pb-4">
+            <button
+              type="button"
+              onClick={stay}
+              className="flex-1 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+            >
+              Seguir en sesión
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+          <div className="h-1 w-full bg-amber-500/15">
+            <div
+              className="h-full bg-amber-500 transition-all duration-1000 ease-linear"
+              style={{ width: `${Math.min(100, (secondsLeft / 60) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
     </OrganizationContext.Provider>
   );
 }
