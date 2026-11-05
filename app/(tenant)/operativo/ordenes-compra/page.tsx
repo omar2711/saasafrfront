@@ -98,6 +98,7 @@ export default function PurchaseOrdersPage() {
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [applyTax, setApplyTax] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -165,10 +166,11 @@ export default function PurchaseOrdersPage() {
 
   const calculateSubtotal = () =>
     formData.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const calculateTax = () => calculateSubtotal() * 0.13;
+  const calculateTax = () => (applyTax ? calculateSubtotal() * 0.13 : 0);
   const calculateTotal = () => calculateSubtotal() + calculateTax();
 
   const handleCreate = () => {
+    setApplyTax(true);
     setFormData({
       supplierId: '',
       branchId: currentBranch?.id ?? '',
@@ -752,7 +754,7 @@ export default function PurchaseOrdersPage() {
                   <span>{formatCurrency(calculateSubtotal())}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span>IVA (13%):</span>
+                  <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="h-4 w-4 accent-primary" /><span>IVA (13%):</span></label>
                   <span>{formatCurrency(calculateTax())}</span>
                 </div>
                 <Separator />
