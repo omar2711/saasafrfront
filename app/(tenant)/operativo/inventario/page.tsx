@@ -66,6 +66,7 @@ export default function InventoryPage() {
   const canViewPricing = hasPermission('products.pricing');
   const [rows, setRows] = useState<StockRow[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<{ product: ProductDto; quantity: number } | null>(null);
+  const [activeTab, setActiveTab] = useState('inventario');
   const [productMap, setProductMap] = useState<Record<string, ProductDto>>({});
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -309,7 +310,7 @@ export default function InventoryPage() {
             <Download className="mr-2 h-4 w-4" />
             Exportar
           </Button>
-          <Button onClick={() => { setEditingProduct(null); setErrorMessage(''); setIsFormOpen(true); }}>
+          <Button className={activeTab === 'categorias' ? 'hidden' : ''} onClick={() => { setEditingProduct(null); setErrorMessage(''); setIsFormOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
             Nuevo Producto
           </Button>
@@ -356,7 +357,7 @@ export default function InventoryPage() {
         onClose={() => setSelectedMovementsProduct(null)}
       />
 
-      <Tabs defaultValue="inventario" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="inventario">Inventario</TabsTrigger>
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
