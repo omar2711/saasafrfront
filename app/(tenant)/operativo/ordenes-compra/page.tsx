@@ -358,14 +358,14 @@ export default function PurchaseOrdersPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <p className="text-muted-foreground">Cargando ordenes de compra...</p>
+        <p className="text-muted-foreground">Cargando ingresos...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Ordenes de Compra" description="Administra las ordenes de compra a proveedores">
+      <PageHeader title="Nuevo Ingreso" description="Registra los ingresos de mercadería de tus proveedores">
         <Button onClick={handleCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Nueva Orden
@@ -498,7 +498,7 @@ export default function PurchaseOrdersPage() {
       {filteredOrders.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Package className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold">No hay ordenes de compra</h3>
+          <h3 className="text-lg font-semibold">No hay ingresos registrados</h3>
           <p className="text-muted-foreground mt-1">
             {searchTerm || statusFilter !== 'all'
               ? 'No se encontraron ordenes con los filtros actuales.'

@@ -44,7 +44,7 @@ const GROUP_META: Record<string, { label: string; feature?: string }> = {
   products: { label: 'Productos' },
   categories: { label: 'Categorías' },
   inventory: { label: 'Inventario' },
-  purchases: { label: 'Órdenes de Compra', feature: 'module_purchases' },
+  purchases: { label: 'Nuevo Ingreso', feature: 'module_purchases' },
   quotes: { label: 'Cotizaciones', feature: 'module_quotes' },
   sales: { label: 'Ventas' },
   reports: { label: 'Reportes' },

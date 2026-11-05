@@ -139,7 +139,7 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Proveedores', href: '/operativo/proveedores', icon: Truck, requiredPermission: 'suppliers.read', requiredPlanFeature: 'module_suppliers' },
       { title: 'Clientes', href: '/operativo/clientes', icon: Users, requiredPermission: 'customers.read', requiredPlanFeature: 'module_customers' },
-      { title: 'Órdenes de Compra', href: '/operativo/ordenes-compra', icon: ClipboardList, requiredPermission: 'purchases.read', requiredPlanFeature: 'module_purchases' },
+      { title: 'Nuevo Ingreso', href: '/operativo/ordenes-compra', icon: ClipboardList, requiredPermission: 'purchases.read', requiredPlanFeature: 'module_purchases' },
       { title: 'Inventario', href: '/operativo/inventario', icon: Package, requiredPermission: 'inventory.read', requiredPlanFeature: 'module_inventory' },
     ],
   },
