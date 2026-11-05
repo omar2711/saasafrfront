@@ -162,7 +162,6 @@ const navigation: NavGroup[] = [
         requiredPlanFeature: 'module_reports',
         children: [
           { title: 'Historial de Inventario', href: '/reportes?tab=inventario', requiredPermission: 'reports.read' },
-          { title: 'Historial de Ventas', href: '/reportes?tab=ventas', requiredPermission: 'reports.read' },
           { title: 'Historial de Cotizaciones', href: '/reportes?tab=cotizaciones', requiredPermission: 'reports.read' },
           { title: 'Historial de Compras', href: '/reportes?tab=compras', requiredPermission: 'reports.read' },
           { title: 'Clientes', href: '/reportes?tab=clientes', requiredPermission: 'reports.read' },
