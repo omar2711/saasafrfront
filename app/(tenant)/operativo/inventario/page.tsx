@@ -165,6 +165,22 @@ export default function InventoryPage() {
         branchId: currentBranch?.id,
       });
       setProductMap(prev => ({ ...prev, [created.id]: created }));
+      let initialQty = 0;
+      if (currentBranch && Number(formData.initialStock) > 0) {
+        try {
+          await inventoryApi.createMovement({
+            branchId: currentBranch.id,
+            productId: created.id,
+            movementType: 'adjustment',
+            quantity: Number(formData.initialStock),
+            unitCost: formData.costPrice || undefined,
+            notes: 'Stock inicial',
+          });
+          initialQty = Number(formData.initialStock);
+        } catch {
+          setErrorMessage('Producto creado, pero no se pudo registrar el stock inicial. Usa "Ajustar stock".');
+        }
+      }
       if (currentBranch) {
         setRows(prev => [...prev, {
           stock: {
@@ -172,7 +188,7 @@ export default function InventoryPage() {
             orgId: created.orgId,
             branchId: currentBranch.id,
             productId: created.id,
-            quantityOnHand: 0,
+            quantityOnHand: initialQty,
             minStock: formData.minStock ?? 0,
             createdAt: created.createdAt,
             updatedAt: created.updatedAt,

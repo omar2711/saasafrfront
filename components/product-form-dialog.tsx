@@ -41,6 +41,7 @@ interface ProductFormDialogProps {
     minSalePrice?: number | null;
     maxSalePrice?: number | null;
     minStock: number;
+    initialStock?: number;
     unit?: string;
     image?: string;
   }) => void;
@@ -73,6 +74,7 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
   const [maxSalePrice, setMaxSalePrice] = useState(editingProduct?.maxSalePrice ?? '');
   const [minStock, setMinStock] = useState(editingProduct?.minStock || '5');
   const [unit, setUnit] = useState(editingProduct?.unit || 'unidad');
+  const [initialStock, setInitialStock] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(editingProduct?.image || null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -88,6 +90,7 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     setMaxSalePrice(editingProduct?.maxSalePrice ?? '');
     setMinStock(editingProduct?.minStock || '5');
     setUnit(editingProduct?.unit || 'unidad');
+    setInitialStock('');
     setImagePreview(editingProduct?.image || null);
     setErrors({});
   }, [isOpen, editingProduct]);
@@ -123,6 +126,10 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
       newErrors.minStock = 'El stock mínimo es requerido';
     } else if (parseFloat(minStock) < 0) {
       newErrors.minStock = 'El stock mínimo no puede ser negativo';
+    }
+
+    if (!editingProduct && initialStock !== '' && (isNaN(parseFloat(initialStock)) || parseFloat(initialStock) < 0)) {
+      newErrors.initialStock = 'El stock inicial no puede ser negativo';
     }
 
     setErrors(newErrors);
@@ -163,6 +170,7 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
         maxSalePrice: maxSalePrice === '' ? null : parseFloat(String(maxSalePrice)),
         unit,
         image: imagePreview || undefined,
+        initialStock: !editingProduct && initialStock !== '' ? parseFloat(initialStock) : undefined,
       };
 
       onSave(data);
@@ -181,6 +189,7 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     setMaxSalePrice('');
     setMinStock('5');
     setUnit('unidad');
+    setInitialStock('');
     setImagePreview(null);
     setErrors({});
   };
@@ -341,6 +350,24 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
               />
               {errors.minStock && <p className="text-xs text-red-500">{errors.minStock}</p>}
             </div>
+
+            {/* Initial Stock (solo al crear) */}
+            {!editingProduct && (
+              <div className="space-y-2">
+                <Label htmlFor="initialStock">Stock Inicial</Label>
+                <Input
+                  id="initialStock"
+                  type="number"
+                  min="0"
+                  value={initialStock}
+                  onChange={(e) => setInitialStock(e.target.value)}
+                  placeholder="0"
+                  className={errors.initialStock ? 'border-red-500' : ''}
+                />
+                <p className="text-xs text-muted-foreground">Opcional - cantidad con la que ingresa a esta sucursal</p>
+                {errors.initialStock && <p className="text-xs text-red-500">{errors.initialStock}</p>}
+              </div>
+            )}
 
             {/* Margin Display */}
             <div className="space-y-2">
