@@ -496,7 +496,7 @@ export default function InventoryPage() {
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => { setEditingProduct({ ...product, minStock: getMinStock(product.id) }); setErrorMessage(''); setIsFormOpen(true); }}>
                                 <Edit className="mr-2 h-4 w-4" />
-                                Editar
+                                {product.status === 'pending_pricing' ? 'Aprobar' : 'Editar'}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setSelectedAdjustProduct(product)}>
                                 <Settings className="mr-2 h-4 w-4" />
