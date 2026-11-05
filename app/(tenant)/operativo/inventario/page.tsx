@@ -213,6 +213,22 @@ export default function InventoryPage() {
     }
   };
 
+  const handleApproveProduct = async (product: ProductDto) => {
+    setErrorMessage('');
+    if (!(product.salePrice > 0)) {
+      // sin precio de venta: abrir el formulario para definirlo
+      setEditingProduct({ ...product, minStock: getMinStock(product.id) });
+      setIsFormOpen(true);
+      return;
+    }
+    try {
+      const updated = await productsApi.update(product.id, { status: 'active' });
+      applyUpdatedProduct(updated);
+    } catch (e: unknown) {
+      setErrorMessage(e instanceof Error ? e.message : 'Error al aprobar producto');
+    }
+  };
+
   const handleToggleProductStatus = async (product: ProductDto) => {
     setErrorMessage('');
     try {
@@ -494,7 +510,7 @@ export default function InventoryPage() {
                                 <Eye className="mr-2 h-4 w-4" />
                                 Ver detalles
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setEditingProduct({ ...product, minStock: getMinStock(product.id) }); setErrorMessage(''); setIsFormOpen(true); }}>
+                              <DropdownMenuItem onClick={() => { if (product.status === 'pending_pricing') { handleApproveProduct(product); return; } setEditingProduct({ ...product, minStock: getMinStock(product.id) }); setErrorMessage(''); setIsFormOpen(true); }}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 {product.status === 'pending_pricing' ? 'Aprobar' : 'Editar'}
                               </DropdownMenuItem>
