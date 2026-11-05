@@ -17,6 +17,16 @@ import { CategoriesTab } from '@/components/categories-tab';
 import { TransfersTab } from '@/components/transfers-tab';
 import { BranchPricesTab } from '@/components/branch-prices-tab';
 import { DeletedProductsTab } from '@/components/deleted-products-tab';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { KitsTab } from '@/components/kits-tab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -55,6 +65,7 @@ export default function InventoryPage() {
   const { currentBranch, hasPermission } = useOrganization();
   const canViewPricing = hasPermission('products.pricing');
   const [rows, setRows] = useState<StockRow[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<{ product: ProductDto; quantity: number } | null>(null);
   const [productMap, setProductMap] = useState<Record<string, ProductDto>>({});
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -214,9 +225,16 @@ export default function InventoryPage() {
     }
   };
 
-  const handleDeleteProduct = async (product: ProductDto) => {
+  const handleDeleteProduct = (product: ProductDto) => {
+    const quantity = rows.find(r => r.product?.id === product.id)?.stock.quantityOnHand ?? 0;
+    setDeleteTarget({ product, quantity });
+  };
+
+  const confirmDeleteProduct = async () => {
+    if (!deleteTarget) return;
+    const product = deleteTarget.product;
+    setDeleteTarget(null);
     setErrorMessage('');
-    if (!confirm(`¿Eliminar "${product.name}"? Podrás restaurarlo desde la papelera.`)) return;
     try {
       await productsApi.delete(product.id);
       setRows(prev => prev.filter(r => r.product?.id !== product.id));
@@ -532,6 +550,23 @@ export default function InventoryPage() {
 
         <TabsContent value="eliminados">
           <DeletedProductsTab onRestored={loadData} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Estás seguro de eliminar este producto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a eliminar <strong>{deleteTarget?.product.name}</strong>, que tiene{' '}
+              <strong>{deleteTarget?.quantity ?? 0} unidades</strong> en stock en esta sucursal.
+              Podrás restaurarlo desde la papelera.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteProduct}>Sí, eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
         </TabsContent>
       </Tabs>
     </div>
