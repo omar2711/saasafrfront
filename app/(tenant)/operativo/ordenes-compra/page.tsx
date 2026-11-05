@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, MoreHorizontal, Eye, Trash2, Upload, X, Package } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Trash2, Upload, X, Package, FileDown } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +59,7 @@ import { productsApi, type ProductDto } from '@/lib/api/products';
 import { PO_STATUSES, poStatusLabels, poStatusMap } from '@/lib/data/purchase-order-status';
 import { useOrganization } from '@/contexts/organization-context';
 import { formatDate } from '@/lib/format';
+import { exportPurchaseOrderPdf } from '@/lib/pdf/purchase-order-pdf';
 
 interface OrderItemFormData {
   productId: string;
@@ -68,6 +69,7 @@ interface OrderItemFormData {
   unitPrice: number;
   category: string;
   imagePreview: string | null;
+  unit: string;
   isNewProduct: boolean;
 }
 
@@ -86,6 +88,7 @@ const emptyItemData: OrderItemFormData = {
   unitPrice: 0,
   category: '',
   imagePreview: null,
+  unit: '',
   isNewProduct: false,
 };
 
@@ -228,6 +231,7 @@ export default function PurchaseOrdersPage() {
             sku: product.sku,
             unitPrice: product.costPrice ?? 0,
             category: product.category ?? '',
+            unit: product.unit ?? '',
             isNewProduct: false,
           } : item
         ),
@@ -283,6 +287,7 @@ export default function PurchaseOrdersPage() {
                 productName: item.productName,
                 sku: item.sku,
                 category: item.category || undefined,
+                unit: item.unit || undefined,
                 quantity: item.quantity,
                 unitCost: item.unitPrice,
               }
@@ -332,6 +337,15 @@ export default function PurchaseOrdersPage() {
   };
 
   // La lista no trae los items: hay que pedir la orden completa para el detalle.
+  const handleExportPdf = async (order: PurchaseOrderDto) => {
+    try {
+      const full = order.items && order.items.length > 0 ? order : await purchaseOrdersApi.get(order.id);
+      exportPurchaseOrderPdf(full, getSupplierName(order.supplierId));
+    } catch {
+      setError('No se pudo exportar el PDF');
+    }
+  };
+
   const openDetail = async (order: PurchaseOrderDto) => {
     setIsViewOpen(true);
     setIsDetailLoading(true);
@@ -448,6 +462,10 @@ export default function PurchaseOrdersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleExportPdf(order)}>
+                          <FileDown className="mr-2 h-4 w-4" />
+                          Exportar PDF
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openDetail(order)}>
                           <Eye className="mr-2 h-4 w-4" />
                           Ver detalles
@@ -653,7 +671,16 @@ export default function PurchaseOrdersPage() {
                         </p>
                       )}
 
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                        <div className="space-y-2">
+                          <Label>Unidad</Label>
+                          <Input
+                            value={item.unit}
+                            onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                            placeholder="pza, kg, caja"
+                            disabled={!item.isNewProduct && !!item.productId}
+                          />
+                        </div>
                         <div className="space-y-2">
                           <Label>Identificador</Label>
                           <Input
