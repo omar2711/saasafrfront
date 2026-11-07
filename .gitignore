@@ -15,3 +15,7 @@ node_modules
 .DS_Store
 .tools/
 **/accounts.local.json
+
+*.bak*
+resultados.txt
+salida.txt
