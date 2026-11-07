@@ -213,7 +213,7 @@ export async function apiRequest<T = unknown>(
   url.searchParams.sort();
   const ttl = url.pathname.includes('/stock') ? 3000 : url.pathname.includes('/pricing') ? 10000
     : /\/(products|kits|categories)(\/|$)/.test(url.pathname) ? 60000 : 15000;
-  if (options.cache === false || !token || !tenantId || !path.startsWith('/operations/')) return load();
+  if (options.cache === false || !token || !tenantId || !/^\/(operations|iam)\//.test(path)) return load();
   const rawKey = JSON.stringify([API_BASE_URL, token, tenantId, url.pathname + url.search]);
   // Persist only a one-way digest of the authenticated scope, not the token.
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey));
