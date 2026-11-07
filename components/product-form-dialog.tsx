@@ -1,15 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { Package, DollarSign, Boxes, ImageIcon, Upload, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -17,10 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Upload, X } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 
 interface CategoryOption {
   id: string;
@@ -69,7 +61,7 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
   const [description, setDescription] = useState(editingProduct?.description || '');
   const [costPrice, setCostPrice] = useState(editingProduct?.costPrice || '');
   const [salePrice, setSalePrice] = useState(editingProduct?.salePrice || '');
-  // Vacio = sin limite. No se normaliza a 0: 0 seria "regalar el producto".
+  // Vacío = sin límite. No se normaliza a 0: 0 sería "regalar el producto".
   const [minSalePrice, setMinSalePrice] = useState(editingProduct?.minSalePrice ?? '');
   const [maxSalePrice, setMaxSalePrice] = useState(editingProduct?.maxSalePrice ?? '');
   const [minStock, setMinStock] = useState(editingProduct?.minStock || '5');
@@ -113,13 +105,13 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     const min = minSalePrice === '' ? null : parseFloat(String(minSalePrice));
     const max = maxSalePrice === '' ? null : parseFloat(String(maxSalePrice));
     if (min !== null && max !== null && min > max) {
-      newErrors.minSalePrice = 'El precio minimo no puede ser mayor que el maximo';
+      newErrors.minSalePrice = 'El precio mínimo no puede ser mayor que el máximo';
     }
     if (min !== null && parseFloat(salePrice) < min) {
-      newErrors.salePrice = 'El precio de venta queda por debajo del minimo autorizado';
+      newErrors.salePrice = 'El precio de venta queda por debajo del mínimo autorizado';
     }
     if (max !== null && parseFloat(salePrice) > max) {
-      newErrors.salePrice = 'El precio de venta supera el maximo autorizado';
+      newErrors.salePrice = 'El precio de venta supera el máximo autorizado';
     }
 
     if (!minStock || isNaN(parseFloat(minStock))) {
@@ -154,9 +146,9 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSubmit = (e?: { preventDefault?: () => void }) => {
+    e?.preventDefault?.();
+
     if (validateForm()) {
       const data: any = {
         name,
@@ -194,193 +186,183 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     setErrors({});
   };
 
-  const margin = salePrice && costPrice 
+  const margin = salePrice && costPrice
     ? (((parseFloat(salePrice) - parseFloat(costPrice)) / parseFloat(salePrice)) * 100).toFixed(1)
     : 0;
 
+  const hasErrors = Object.keys(errors).length > 0;
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-          </DialogTitle>
-          <DialogDescription>
-            {editingProduct
-              ? 'Actualiza los datos del producto'
-              : 'Añade un nuevo producto a tu catálogo'}
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={isOpen}
+      onOpenChange={(open) => !open && onCancel()}
+      icon={Package}
+      title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+      description={editingProduct ? 'Actualiza los datos del producto.' : 'Añade un nuevo producto a tu catálogo.'}
+      size="xl"
+      submitLabel={editingProduct ? 'Actualizar' : 'Crear producto'}
+      onSubmit={handleSubmit}
+      error={hasErrors ? 'Revisa los campos marcados en rojo.' : null}
+    >
+      <FormSection icon={Package} title="Datos del producto">
+        <FormGrid>
+          <FormField label="Nombre del producto" htmlFor="name" required>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Laptop Dell XPS"
+              className={errors.name ? 'border-red-500' : ''}
+            />
+            {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
+          </FormField>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Name */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Nombre del Producto *</Label>
+          <FormField label="Identificador" htmlFor="sku" required>
+            <Input
+              id="sku"
+              value={sku}
+              onChange={(e) => setSku(e.target.value.toUpperCase())}
+              placeholder="LPTP-DELL-XPS-001"
+              className={errors.sku ? 'border-red-500' : ''}
+            />
+            {errors.sku && <p className="mt-1 text-xs text-red-500">{errors.sku}</p>}
+          </FormField>
+
+          <FormField label="Categoría" htmlFor="category">
+            <Select value={categoryId} onValueChange={setCategoryId}>
+              <SelectTrigger id="category">
+                <SelectValue placeholder="Sin categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CATEGORY}>Sin categoría</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+
+          <FormField label="Unidad de medida" htmlFor="unit">
+            <Select value={unit} onValueChange={setUnit}>
+              <SelectTrigger id="unit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UNITS.map((u) => (
+                  <SelectItem key={u} value={u}>
+                    {u}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        </FormGrid>
+      </FormSection>
+
+      <FormSection icon={DollarSign} title="Precios">
+        <FormGrid>
+          <FormField label="Precio de compra" htmlFor="costPrice">
+            <Input
+              id="costPrice"
+              type="number"
+              step="0.01"
+              value={costPrice}
+              onChange={(e) => setCostPrice(e.target.value)}
+              placeholder="0.00"
+              className={errors.costPrice ? 'border-red-500' : ''}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Opcional - por defecto 0</p>
+            {errors.costPrice && <p className="mt-1 text-xs text-red-500">{errors.costPrice}</p>}
+          </FormField>
+
+          <FormField label="Precio de venta" htmlFor="salePrice" required>
+            <Input
+              id="salePrice"
+              type="number"
+              step="0.01"
+              value={salePrice}
+              onChange={(e) => setSalePrice(e.target.value)}
+              placeholder="0.00"
+              className={errors.salePrice ? 'border-red-500' : ''}
+            />
+            {errors.salePrice && <p className="mt-1 text-xs text-red-500">{errors.salePrice}</p>}
+          </FormField>
+
+          {/* Rango autorizado: lo que el backend exige al vender. Vacío = sin límite. */}
+          <FormField label="Precio mínimo autorizado" htmlFor="minSalePrice">
+            <Input
+              id="minSalePrice"
+              type="number"
+              step="0.01"
+              value={minSalePrice}
+              onChange={(e) => setMinSalePrice(e.target.value)}
+              placeholder="Sin límite"
+              className={errors.minSalePrice ? 'border-red-500' : ''}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Vacío = sin límite. Solo un Gerente puede vender por debajo.
+            </p>
+            {errors.minSalePrice && <p className="mt-1 text-xs text-red-500">{errors.minSalePrice}</p>}
+          </FormField>
+
+          <FormField label="Precio máximo autorizado" htmlFor="maxSalePrice">
+            <Input
+              id="maxSalePrice"
+              type="number"
+              step="0.01"
+              value={maxSalePrice}
+              onChange={(e) => setMaxSalePrice(e.target.value)}
+              placeholder="Sin límite"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Vacío = sin límite.</p>
+          </FormField>
+
+          <FormField label="Margen de ganancia">
+            <div className="pt-2 text-lg font-semibold text-green-600">{margin}%</div>
+          </FormField>
+        </FormGrid>
+      </FormSection>
+
+      <FormSection icon={Boxes} title="Inventario">
+        <FormGrid>
+          <FormField label="Stock mínimo" htmlFor="minStock" required>
+            <Input
+              id="minStock"
+              type="number"
+              value={minStock}
+              onChange={(e) => setMinStock(e.target.value)}
+              placeholder="5"
+              className={errors.minStock ? 'border-red-500' : ''}
+            />
+            {errors.minStock && <p className="mt-1 text-xs text-red-500">{errors.minStock}</p>}
+          </FormField>
+
+          {/* Stock inicial (solo al crear) */}
+          {!editingProduct && (
+            <FormField label="Stock inicial" htmlFor="initialStock">
               <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Laptop Dell XPS"
-                className={errors.name ? 'border-red-500' : ''}
-              />
-              {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
-            </div>
-
-            {/* SKU */}
-            <div className="space-y-2">
-              <Label htmlFor="sku">Identificador *</Label>
-              <Input
-                id="sku"
-                value={sku}
-                onChange={(e) => setSku(e.target.value.toUpperCase())}
-                placeholder="LPTP-DELL-XPS-001"
-                className={errors.sku ? 'border-red-500' : ''}
-              />
-              {errors.sku && <p className="text-xs text-red-500">{errors.sku}</p>}
-            </div>
-
-            {/* Category */}
-            <div className="space-y-2">
-              <Label htmlFor="category">Categoría</Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_CATEGORY}>Sin categoría</SelectItem>
-                  {categories.map(cat => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Unit */}
-            <div className="space-y-2">
-              <Label htmlFor="unit">Unidad de Medida</Label>
-              <Select value={unit} onValueChange={setUnit}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNITS.map(u => (
-                    <SelectItem key={u} value={u}>
-                      {u}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Cost Price */}
-            <div className="space-y-2">
-              <Label htmlFor="costPrice">Precio de Compra</Label>
-              <Input
-                id="costPrice"
+                id="initialStock"
                 type="number"
-                step="0.01"
-                value={costPrice}
-                onChange={(e) => setCostPrice(e.target.value)}
-                placeholder="0.00"
-                className={errors.costPrice ? 'border-red-500' : ''}
+                min="0"
+                value={initialStock}
+                onChange={(e) => setInitialStock(e.target.value)}
+                placeholder="0"
+                className={errors.initialStock ? 'border-red-500' : ''}
               />
-              <p className="text-xs text-muted-foreground">Opcional - por defecto 0</p>
-              {errors.costPrice && <p className="text-xs text-red-500">{errors.costPrice}</p>}
-            </div>
-
-            {/* Sale Price */}
-            <div className="space-y-2">
-              <Label htmlFor="salePrice">Precio de Venta *</Label>
-              <Input
-                id="salePrice"
-                type="number"
-                step="0.01"
-                value={salePrice}
-                onChange={(e) => setSalePrice(e.target.value)}
-                placeholder="0.00"
-                className={errors.salePrice ? 'border-red-500' : ''}
-              />
-              {errors.salePrice && <p className="text-xs text-red-500">{errors.salePrice}</p>}
-            </div>
-
-            {/* Rango autorizado: lo que el backend exige al vender. Vacio = sin limite. */}
-            <div className="space-y-2">
-              <Label htmlFor="minSalePrice">Precio minimo autorizado</Label>
-              <Input
-                id="minSalePrice"
-                type="number"
-                step="0.01"
-                value={minSalePrice}
-                onChange={(e) => setMinSalePrice(e.target.value)}
-                placeholder="Sin limite"
-                className={errors.minSalePrice ? 'border-red-500' : ''}
-              />
-              <p className="text-xs text-muted-foreground">
-                Vacio = sin limite. Solo un Gerente puede vender por debajo.
+              <p className="mt-1 text-xs text-muted-foreground">
+                Opcional - cantidad con la que ingresa a esta sucursal
               </p>
-              {errors.minSalePrice && <p className="text-xs text-red-500">{errors.minSalePrice}</p>}
-            </div>
+              {errors.initialStock && <p className="mt-1 text-xs text-red-500">{errors.initialStock}</p>}
+            </FormField>
+          )}
+        </FormGrid>
+      </FormSection>
 
-            <div className="space-y-2">
-              <Label htmlFor="maxSalePrice">Precio maximo autorizado</Label>
-              <Input
-                id="maxSalePrice"
-                type="number"
-                step="0.01"
-                value={maxSalePrice}
-                onChange={(e) => setMaxSalePrice(e.target.value)}
-                placeholder="Sin limite"
-              />
-              <p className="text-xs text-muted-foreground">Vacio = sin limite.</p>
-            </div>
-
-            {/* Min Stock */}
-            <div className="space-y-2">
-              <Label htmlFor="minStock">Stock Mínimo *</Label>
-              <Input
-                id="minStock"
-                type="number"
-                value={minStock}
-                onChange={(e) => setMinStock(e.target.value)}
-                placeholder="5"
-                className={errors.minStock ? 'border-red-500' : ''}
-              />
-              {errors.minStock && <p className="text-xs text-red-500">{errors.minStock}</p>}
-            </div>
-
-            {/* Initial Stock (solo al crear) */}
-            {!editingProduct && (
-              <div className="space-y-2">
-                <Label htmlFor="initialStock">Stock Inicial</Label>
-                <Input
-                  id="initialStock"
-                  type="number"
-                  min="0"
-                  value={initialStock}
-                  onChange={(e) => setInitialStock(e.target.value)}
-                  placeholder="0"
-                  className={errors.initialStock ? 'border-red-500' : ''}
-                />
-                <p className="text-xs text-muted-foreground">Opcional - cantidad con la que ingresa a esta sucursal</p>
-                {errors.initialStock && <p className="text-xs text-red-500">{errors.initialStock}</p>}
-              </div>
-            )}
-
-            {/* Margin Display */}
-            <div className="space-y-2">
-              <Label>Margen de Ganancia</Label>
-              <div className="pt-2 text-lg font-semibold text-green-600">
-                {margin}%
-              </div>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Descripción</Label>
+      <FormSection icon={ImageIcon} title="Descripción e imagen">
+        <div className="space-y-4">
+          <FormField label="Descripción (opcional)" htmlFor="description">
             <Textarea
               id="description"
               value={description}
@@ -388,15 +370,15 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
               placeholder="Descripción detallada del producto..."
               rows={3}
             />
-          </div>
+          </FormField>
 
-          {/* Image Upload */}
-          <div className="space-y-2">
-            <Label>Imagen del Producto</Label>
+          <FormField label="Imagen del producto (opcional)">
             <div className="flex gap-4">
               <div className="flex-1">
-                <div className="border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted/50 transition"
-                     onClick={() => fileInputRef.current?.click()}>
+                <div
+                  className="cursor-pointer rounded-lg border-2 border-dashed p-4 transition hover:bg-muted/50"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -411,37 +393,27 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
                 </div>
               </div>
 
-              {/* Image Preview */}
               {imagePreview && (
-                <div className="relative w-24 h-24">
+                <div className="relative h-24 w-24">
                   <img
                     src={imagePreview}
-                    alt="Preview"
-                    className="w-full h-full object-cover rounded-lg"
+                    alt="Vista previa"
+                    className="h-full w-full rounded-lg object-cover"
                   />
                   <button
                     type="button"
+                    aria-label="Quitar imagen"
                     onClick={handleRemoveImage}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white hover:bg-red-600"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2 justify-end pt-4 border-t">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancelar
-            </Button>
-            <Button type="submit">
-              {editingProduct ? 'Actualizar' : 'Crear Producto'}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+          </FormField>
+        </div>
+      </FormSection>
+    </FormDialog>
   );
 }
