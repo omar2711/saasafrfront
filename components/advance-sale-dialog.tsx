@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Loader2, AlertCircle, PackageCheck, Wallet } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -12,13 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 import { purchaseOrdersApi, type OpenPurchaseOrderLineDto } from '@/lib/api/purchase-orders';
 import type { PaymentMethod } from '@/lib/api/sales';
 
@@ -118,34 +111,37 @@ export function AdvanceSaleDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Venta adelantada</DialogTitle>
-          <DialogDescription>
-            Estos productos no tienen stock suficiente. Puedes reservarlos contra una orden de compra
-            abierta y registrar un anticipo; el resto se cobrara al entregar.
-          </DialogDescription>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
+    <FormDialog
+      open={isOpen}
+      onOpenChange={(open) => !open && onCancel()}
+      icon={PackageCheck}
+      title="Venta adelantada"
+      description="Estos productos no tienen stock suficiente. Reserva contra una orden de compra abierta y registra un anticipo; el resto se cobra al entregar."
+      submitLabel="Confirmar reserva"
+      onSubmit={handleConfirm}
+      isSubmitting={Boolean(isSaving)}
+      submitDisabled={!canSubmit}
+      error={error || null}
+    >
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          <FormSection icon={PackageCheck} title="Productos a reservar">
             {items.map((item) => {
               const lines = optionsByProduct[item.productId] ?? [];
               return (
-                <div key={item.productId} className="space-y-1.5">
-                  <Label>
-                    {item.name} — necesitas {item.needed}, hay {item.available} en stock
-                  </Label>
+                <FormField
+                  key={item.productId}
+                  label={item.name}
+                  hint={`Necesitas ${item.needed}, hay ${item.available} en stock`}
+                >
                   {lines.length === 0 ? (
                     <p className="flex items-center gap-2 text-sm text-destructive">
                       <AlertCircle className="h-4 w-4" />
-                      No hay ordenes de compra abiertas para este producto
+                      No hay órdenes de compra abiertas para este producto
                     </p>
                   ) : (
                     <Select
@@ -168,13 +164,22 @@ export function AdvanceSaleDialog({
                       </SelectContent>
                     </Select>
                   )}
-                </div>
+                </FormField>
               );
             })}
+          </FormSection>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t">
-              <div className="space-y-1.5">
-                <Label>Anticipo</Label>
+          <FormSection icon={Wallet} title="Anticipo">
+            <FormGrid>
+              <FormField
+                label="Anticipo"
+                error={depositError}
+                hint={
+                  !depositError && hasValidDeposit && depositAmountNum <= total
+                    ? `Saldo pendiente al entregar: ${formatCurrency(total - depositAmountNum)}`
+                    : undefined
+                }
+              >
                 <Input
                   type="number"
                   step="0.01"
@@ -185,9 +190,8 @@ export function AdvanceSaleDialog({
                   placeholder="0.00"
                   aria-invalid={Boolean(depositError)}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Metodo</Label>
+              </FormField>
+              <FormField label="Método de pago">
                 <Select value={depositMethod} onValueChange={(v) => setDepositMethod(v as PaymentMethod)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -198,30 +202,11 @@ export function AdvanceSaleDialog({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-
-            {depositError && (
-              <p className="text-sm text-destructive">{depositError}</p>
-            )}
-            {!depositError && hasValidDeposit && depositAmountNum <= total && (
-              <p className="text-sm text-muted-foreground">
-                Saldo pendiente al entregar: {formatCurrency(total - depositAmountNum)}
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={onCancel} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleConfirm} disabled={!canSubmit || isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirmar reserva
-              </Button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+              </FormField>
+            </FormGrid>
+          </FormSection>
+        </>
+      )}
+    </FormDialog>
   );
 }

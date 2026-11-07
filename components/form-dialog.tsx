@@ -23,6 +23,8 @@ interface FormDialogProps {
   cancelLabel?: string;
   onSubmit: () => void | Promise<void>;
   isSubmitting?: boolean;
+  /** Deshabilita el botón principal (p. ej. mientras falta un dato obligatorio). */
+  submitDisabled?: boolean;
   /** Mensaje de error general; se muestra sobre los botones. */
   error?: string | null;
   size?: 'md' | 'lg' | 'xl';
@@ -41,6 +43,7 @@ export function FormDialog({
   cancelLabel = 'Cancelar',
   onSubmit,
   isSubmitting = false,
+  submitDisabled = false,
   error,
   size = 'lg',
   children,
@@ -91,7 +94,7 @@ export function FormDialog({
               >
                 {cancelLabel}
               </Button>
-              <Button type="submit" disabled={isSubmitting} className="min-w-[120px]">
+              <Button type="submit" disabled={isSubmitting || submitDisabled} className="min-w-[120px]">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {submitLabel}
               </Button>
