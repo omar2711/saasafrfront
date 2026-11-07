@@ -1,5 +1,9 @@
 'use client';
 
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { ArrowLeftRight as TransferIcon, Boxes as ProductsIcon, StickyNote as NotesIcon } from 'lucide-react';
+
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Loader2, ArrowRight, Trash2, Check, X, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -166,106 +170,111 @@ export function TransfersTab() {
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nuevo Traspaso</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Sucursal origen</Label>
-                <Select value={sourceBranchId} onValueChange={setSourceBranchId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Origen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Sucursal destino</Label>
-                <Select value={destBranchId} onValueChange={setDestBranchId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        icon={TransferIcon}
+        title="Nuevo Traspaso"
+        description="Mueve stock de una sucursal a otra."
+        size="xl"
+        submitLabel="Crear traspaso"
+        onSubmit={handleSave}
+        isSubmitting={isSaving}
+        error={formError || null}
+      >
+        <FormSection icon={TransferIcon} title="Sucursales">
+          <FormGrid>
+            <FormField label="Sucursal origen" required>
+              <Select value={sourceBranchId} onValueChange={setSourceBranchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Origen" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Sucursal destino" required>
+              <Select value={destBranchId} onValueChange={setDestBranchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Destino" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          </FormGrid>
+        </FormSection>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Productos</Label>
+        <FormSection icon={ProductsIcon} title="Productos a traspasar">
+          <div className="space-y-2">
+            <div className="hidden items-center gap-2 px-0.5 text-xs font-medium text-muted-foreground sm:flex">
+              <span className="flex-1">Producto</span>
+              <span className="w-24">Cantidad</span>
+              <span className="w-9" />
+            </div>
+            {items.map((item, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <div className="flex-1">
+                  <Select value={item.productId} onValueChange={(v) => updateItem(index, { productId: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Producto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  className="w-24"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(index, { quantity: e.target.value })}
+                />
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setItems((prev) => [...prev, { productId: '', quantity: '1' }])}
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Quitar producto"
+                  onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
+                  disabled={items.length === 1}
                 >
-                  <Plus className="mr-1 h-3 w-3" /> Agregar
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-              {items.map((item, index) => (
-                <div key={index} className="flex gap-2 items-center">
-                  <div className="flex-1">
-                    <Select value={item.productId} onValueChange={(v) => updateItem(index, { productId: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Producto" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    className="w-24"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(index, { quantity: e.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
-                    disabled={items.length === 1}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Notas (opcional)</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
-            </div>
-
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Crear Traspaso
-              </Button>
-            </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setItems((prev) => [...prev, { productId: '', quantity: '1' }])}
+            >
+              <Plus className="mr-1 h-3 w-3" /> Agregar producto
+            </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </FormSection>
+
+        <FormSection icon={NotesIcon} title="Notas">
+          <FormField label="Notas (opcional)" htmlFor="transfer-notes">
+            <Textarea
+              id="transfer-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Ej: Reposición semanal"
+            />
+          </FormField>
+        </FormSection>
+      </FormDialog>
 
       <Card>
         <CardContent className="p-0">

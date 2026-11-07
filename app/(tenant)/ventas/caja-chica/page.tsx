@@ -1,5 +1,9 @@
 'use client';
 
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { TrendingUp as IncomeIcon, TrendingDown as ExpenseIcon } from 'lucide-react';
+
 import { useEffect, useState } from 'react';
 import { Plus, ArrowUpRight, ArrowDownRight, Filter, Search, Trash2, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -89,7 +93,7 @@ export default function PettyCashPage() {
   const [deleting, setDeleting] = useState(false);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
 
   async function loadData() {
     try {
@@ -371,49 +375,50 @@ export default function PettyCashPage() {
       </Card>
 
       {/* Create Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {dialogType === 'income' ? 'Registrar Ingreso' : 'Registrar Gasto'}
-            </DialogTitle>
-            <DialogDescription>
-              Completa los datos del movimiento de caja chica.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="amount">Monto *</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={form.amount}
-                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="category">Categoría *</Label>
-                <Select
-                  value={form.category}
-                  onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
-                >
-                  <SelectTrigger id="category">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="description">Descripción *</Label>
+      <FormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        icon={dialogType === 'income' ? IncomeIcon : ExpenseIcon}
+        title={dialogType === 'income' ? 'Registrar Ingreso' : 'Registrar Gasto'}
+        description="Completa los datos del movimiento de caja chica."
+        size="md"
+        submitLabel={dialogType === 'income' ? 'Registrar ingreso' : 'Registrar gasto'}
+        onSubmit={handleSave}
+        isSubmitting={saving}
+        error={formError || null}
+      >
+        <FormSection
+          icon={dialogType === 'income' ? IncomeIcon : ExpenseIcon}
+          title="Datos del movimiento"
+        >
+          <FormGrid>
+            <FormField label="Monto" htmlFor="amount" required>
+              <Input
+                id="amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="0.00"
+                value={form.amount}
+                onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              />
+            </FormField>
+            <FormField label="Categoría" htmlFor="category" required>
+              <Select
+                value={form.category}
+                onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
+              >
+                <SelectTrigger id="category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label="Descripción" htmlFor="description" required className="sm:col-span-2">
               <Textarea
                 id="description"
                 placeholder="Descripción del movimiento..."
@@ -421,30 +426,18 @@ export default function PettyCashPage() {
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="reference">Referencia / N° Comprobante</Label>
+            </FormField>
+            <FormField label="Referencia / N° Comprobante" htmlFor="reference" className="sm:col-span-2">
               <Input
                 id="reference"
                 placeholder="FAC-0001 (opcional)"
                 value={form.reference}
                 onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
               />
-            </div>
-            {formError && (
-              <p className="text-sm text-destructive">{formError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Guardando...' : 'Guardar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </FormField>
+          </FormGrid>
+        </FormSection>
+      </FormDialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>

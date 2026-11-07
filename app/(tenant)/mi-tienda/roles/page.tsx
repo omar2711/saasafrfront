@@ -1,7 +1,11 @@
 'use client';
 
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { ShieldCheck as RoleIcon, KeyRound as PermsIcon } from 'lucide-react';
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Shield, Loader2, MoreHorizontal, Lock } from 'lucide-react';
+import { Plus, Shield, Loader2, MoreHorizontal, Lock, Trash2, CheckCircle2 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -73,6 +77,16 @@ export default function RolesPage() {
   const [selectedPerms, setSelectedPerms] = useState<Set<string>>(new Set());
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<RoleDto | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [notice, setNotice] = useState<{ title: string; description: string } | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -176,13 +190,29 @@ export default function RolesPage() {
     }
   };
 
-  const handleDelete = async (role: RoleDto) => {
-    if (!confirm(`¿Eliminar el rol "${role.name}"?`)) return;
+  const askDelete = (role: RoleDto) => {
+    setDeleteError('');
+    setRoleToDelete(role);
+  };
+
+  const confirmDelete = async () => {
+    if (!roleToDelete) return;
+    setIsDeleting(true);
+    setDeleteError('');
     try {
-      await rolesApi.remove(role.id);
+      await rolesApi.remove(roleToDelete.id);
+      const deletedName = roleToDelete.name;
+      setRoleToDelete(null);
+      setNotice({ title: '¡Rol eliminado!', description: `El rol "${deletedName}" ya no existe.` });
       await loadData();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error al eliminar el rol');
+      setDeleteError(
+        e instanceof Error && e.message
+          ? e.message
+          : 'No se pudo eliminar el rol. Puede que tenga usuarios asignados.',
+      );
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -201,57 +231,101 @@ export default function RolesPage() {
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Rol' : 'Nuevo Rol'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label>Nombre del rol</Label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Empleado, Vendedor, ..."
-              />
-            </div>
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        icon={RoleIcon}
+        title={editing ? 'Editar Rol' : 'Nuevo Rol'}
+        description="El rol decide qué puede hacer cada usuario dentro de la organización."
+        size="xl"
+        submitLabel={editing ? 'Guardar cambios' : 'Crear rol'}
+        onSubmit={handleSave}
+        isSubmitting={isSaving}
+        error={formError || null}
+      >
+        <FormSection icon={RoleIcon} title="Datos del rol">
+          <FormField label="Nombre del rol" htmlFor="role-name" required>
+            <Input
+              id="role-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Empleado, Vendedor, ..."
+            />
+          </FormField>
+        </FormSection>
 
-            <div className="space-y-3">
-              <Label>Permisos</Label>
-              <p className="text-xs text-muted-foreground">
-                Solo se muestran las funcionalidades disponibles en tu plan.
-              </p>
-              {groups.map((group) => (
-                <div key={group.prefix} className="rounded-md border p-3">
-                  <div className="font-medium text-sm mb-2">{group.label}</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {group.perms.map((perm) => (
-                      <label key={perm.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox
-                          checked={selectedPerms.has(perm.id)}
-                          onCheckedChange={() => togglePerm(perm.id)}
-                        />
-                        <span>{perm.description ?? perm.code}</span>
-                      </label>
-                    ))}
-                  </div>
+        <FormSection
+          icon={PermsIcon}
+          title="Permisos"
+          description="Solo se muestran las funcionalidades disponibles en tu plan."
+        >
+          <div className="space-y-3">
+            {groups.map((group) => (
+              <div key={group.prefix} className="rounded-md border p-3">
+                <div className="mb-2 text-sm font-medium">{group.label}</div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {group.perms.map((perm) => (
+                    <label key={perm.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedPerms.has(perm.id)}
+                        onCheckedChange={() => togglePerm(perm.id)}
+                      />
+                      <span>{perm.description ?? perm.code}</span>
+                    </label>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
+        </FormSection>
+      </FormDialog>
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editing ? 'Guardar' : 'Crear Rol'}
-              </Button>
+      <Dialog
+        open={!!roleToDelete}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setRoleToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 ring-8 ring-red-50">
+              <Trash2 className="h-7 w-7 text-red-600" />
             </div>
+            <DialogTitle className="text-center">¿Eliminar este rol?</DialogTitle>
+          </DialogHeader>
+          <p className="text-center text-sm text-muted-foreground">
+            Vas a eliminar el rol{' '}
+            <span className="font-medium text-foreground">{roleToDelete?.name}</span>. Esta acción
+            no se puede deshacer.
+          </p>
+          {deleteError && (
+            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setRoleToDelete(null)} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Eliminar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {notice && (
+        <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-3xl border bg-card p-8 text-center text-card-foreground shadow-2xl animate-in zoom-in-90 duration-300">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 ring-8 ring-emerald-50">
+              <CheckCircle2 className="h-9 w-9 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold">{notice.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{notice.description}</p>
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -316,9 +390,10 @@ export default function RolesPage() {
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => handleDelete(role)}
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => askDelete(role)}
                                 >
+                                  <Trash2 className="mr-2 h-4 w-4" />
                                   Eliminar
                                 </DropdownMenuItem>
                               </>
