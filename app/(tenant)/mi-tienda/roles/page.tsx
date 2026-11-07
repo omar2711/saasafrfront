@@ -80,6 +80,8 @@ export default function RolesPage() {
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [notice, setNotice] = useState<{ title: string; description: string } | null>(null);
+  const isOwnerRole = (r: RoleDto | null) => !!r && r.isSystem && r.name === 'Propietario';
+  const lockedOwner = isOwnerRole(editing);
 
   useEffect(() => {
     if (!notice) return;
@@ -152,6 +154,10 @@ export default function RolesPage() {
 
   const handleSave = async () => {
     setFormError('');
+    if (isOwnerRole(editing)) {
+      setDialogOpen(false);
+      return;
+    }
     if (!name.trim()) {
       setFormError('El nombre es requerido');
       return;
@@ -237,7 +243,7 @@ export default function RolesPage() {
         title={editing ? 'Editar Rol' : 'Nuevo Rol'}
         description="El rol decide qué puede hacer cada usuario dentro de la organización."
         size="xl"
-        submitLabel={editing ? 'Guardar cambios' : 'Crear rol'}
+        submitLabel={lockedOwner ? 'Cerrar' : editing ? 'Guardar cambios' : 'Crear rol'}
         onSubmit={handleSave}
         isSubmitting={isSaving}
         error={formError || null}
@@ -249,6 +255,7 @@ export default function RolesPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Empleado, Vendedor, ..."
+              disabled={lockedOwner}
             />
           </FormField>
         </FormSection>
@@ -259,6 +266,12 @@ export default function RolesPage() {
           description="Solo se muestran las funcionalidades disponibles en tu plan."
         >
           <div className="space-y-3">
+            {lockedOwner && (
+              <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                <Lock className="h-4 w-4 shrink-0" />
+                El rol Propietario siempre tiene acceso total y no se puede modificar.
+              </div>
+            )}
             {groups.map((group) => (
               <div key={group.prefix} className="rounded-md border p-3">
                 <div className="mb-2 text-sm font-medium">{group.label}</div>
@@ -266,7 +279,8 @@ export default function RolesPage() {
                   {group.perms.map((perm) => (
                     <label key={perm.id} className="flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox
-                        checked={selectedPerms.has(perm.id)}
+                        checked={lockedOwner || selectedPerms.has(perm.id)}
+                        disabled={lockedOwner}
                         onCheckedChange={() => togglePerm(perm.id)}
                       />
                       <span>{perm.description ?? perm.code}</span>
