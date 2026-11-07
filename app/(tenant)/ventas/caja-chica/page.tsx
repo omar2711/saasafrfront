@@ -5,13 +5,12 @@ import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 import { TrendingUp as IncomeIcon, TrendingDown as ExpenseIcon } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
-import { Plus, ArrowUpRight, ArrowDownRight, Filter, Search, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Search, Trash2, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -28,14 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,

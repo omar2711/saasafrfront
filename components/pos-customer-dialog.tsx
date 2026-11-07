@@ -4,19 +4,16 @@ import { useEffect, useState } from 'react';
 import { Loader2, Search, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CustomerForm, emptyCustomerFormData, type CustomerFormData } from '@/components/customer-form';
 import { customersApi, type CustomerDto } from '@/lib/api/customers';
-import { CountryCodeCombobox } from '@/components/country-code-combobox';
 import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
 import { joinPhone, validatePhone } from '@/lib/utils/phone';
 import { PhoneField } from '@/components/phone-field';

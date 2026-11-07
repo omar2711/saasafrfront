@@ -8,7 +8,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Loader2, ArrowRight, Trash2, Check, X, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,12 +32,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { transfersApi, type TransferDto, type TransferStatus } from '@/lib/api/transfers';
 import { productsApi, type ProductDto } from '@/lib/api/products';
 import { useOrganization } from '@/contexts/organization-context';

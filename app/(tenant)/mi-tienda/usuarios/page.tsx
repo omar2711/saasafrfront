@@ -9,16 +9,14 @@ import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
 import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, MoreHorizontal, UserPlus, Loader2, CheckCircle2, Trash2 } from 'lucide-react';
+import { Search, MoreHorizontal, UserPlus, Loader2, CheckCircle2, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
   DropdownMenuContent,
