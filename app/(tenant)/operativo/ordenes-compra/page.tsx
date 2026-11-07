@@ -1,5 +1,9 @@
 'use client';
 
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { ClipboardList as OrderIcon, Boxes as ItemsIcon, Calculator as SummaryIcon } from 'lucide-react';
+
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Search, MoreHorizontal, Eye, Trash2, Upload, X, Package, FileDown } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -538,269 +542,256 @@ export default function PurchaseOrdersPage() {
       </Tabs>
 
       {/* Create Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Nueva Orden de Compra</DialogTitle>
-            <DialogDescription>Completa los datos para crear una nueva orden de compra.</DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-6 py-4">
-            {error && <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="supplier">Proveedor *</Label>
-                <Select value={formData.supplierId} onValueChange={(v) => setFormData(prev => ({ ...prev, supplierId: v }))}>
-                  <SelectTrigger id="supplier">
-                    <SelectValue placeholder="Selecciona un proveedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectableSuppliers.map(s => (
-                      <SelectItem key={s.id} value={s.id}>
-                        <div className="flex flex-col">
-                          <span>{s.name}</span>
-                          {s.company && <span className="text-xs text-muted-foreground">{s.company}</span>}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectableSuppliers.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No hay proveedores activos. Crea uno en Proveedores antes de encargar.
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="branch">Sucursal de destino *</Label>
-                <Select value={formData.branchId} onValueChange={(v) => setFormData(prev => ({ ...prev, branchId: v }))}>
-                  <SelectTrigger id="branch">
-                    <SelectValue placeholder="Selecciona una sucursal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.filter(b => b.isActive).map(b => (
-                      <SelectItem key={b.id} value={b.id}>
-                        <div className="flex flex-col">
-                          <span>{b.name}</span>
-                          {b.address && <span className="text-xs text-muted-foreground">{b.address}</span>}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Productos</Label>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Agregar Producto
-                </Button>
-              </div>
-
-              {formData.items.map((item, index) => (
-                <Card key={index} className="relative">
-                  <CardContent className="p-4">
-                    {formData.items.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-2 right-2 h-8 w-8"
-                        onClick={() => handleRemoveItem(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-
-                    <div className="grid gap-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Producto *</Label>
-                          <Select value={item.isNewProduct ? '__new__' : item.productId} onValueChange={(v) => handleProductSelect(index, v)}>
-                            <SelectTrigger className={!item.productId && !item.isNewProduct ? 'border-destructive' : ''}>
-                              <SelectValue placeholder="Seleccionar producto del catálogo..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__new__">
-                                <span className="font-medium text-primary">+ Crear producto nuevo</span>
-                              </SelectItem>
-                              {products.map(p => (
-                                <SelectItem key={p.id} value={p.id}>
-                                  <div className="flex items-center gap-2">
-                                    <span>{p.name}</span>
-                                    <span className="text-xs text-muted-foreground">({p.sku})</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {!item.productId && !item.isNewProduct && (
-                            <p className="text-xs text-destructive">Selecciona un producto del catálogo</p>
-                          )}
-                        </div>
-                        {item.isNewProduct ? (
-                          <div className="space-y-2">
-                            <Label>Nombre del producto *</Label>
-                            <Input
-                              value={item.productName}
-                              onChange={(e) => handleItemChange(index, 'productName', e.target.value)}
-                              placeholder="Nombre del producto nuevo"
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <Label className="text-muted-foreground">Identificador</Label>
-                            <Input
-                              value={item.sku}
-                              readOnly
-                              placeholder="Se completa al seleccionar"
-                              className="bg-muted/50 font-mono text-sm"
-                            />
-                          </div>
-                        )}
+      <FormDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        icon={OrderIcon}
+        title="Nueva Orden de Compra"
+        description="Completa los datos para crear una nueva orden de compra."
+        size="xl"
+        submitLabel="Crear orden"
+        onSubmit={handleSubmitCreate}
+        isSubmitting={isSubmitting}
+        submitDisabled={!isFormValid()}
+        error={error}
+      >
+        <FormSection icon={OrderIcon} title="Proveedor y destino">
+          <FormGrid>
+            <FormField label="Proveedor" htmlFor="supplier" required>
+              <Select value={formData.supplierId} onValueChange={(v) => setFormData(prev => ({ ...prev, supplierId: v }))}>
+                <SelectTrigger id="supplier">
+                  <SelectValue placeholder="Selecciona un proveedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectableSuppliers.map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      <div className="flex flex-col">
+                        <span>{s.name}</span>
+                        {s.company && <span className="text-xs text-muted-foreground">{s.company}</span>}
                       </div>
-                      {item.isNewProduct && (
-                        <p className="text-xs text-muted-foreground">
-                          Este producto se creará como "pendiente de precio" en el inventario. Podrás definir su precio de venta más tarde desde Productos.
-                        </p>
-                      )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectableSuppliers.length === 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No hay proveedores activos. Crea uno en Proveedores antes de encargar.
+                </p>
+              )}
+            </FormField>
+            <FormField label="Sucursal de destino" htmlFor="branch" required>
+              <Select value={formData.branchId} onValueChange={(v) => setFormData(prev => ({ ...prev, branchId: v }))}>
+                <SelectTrigger id="branch">
+                  <SelectValue placeholder="Selecciona una sucursal" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.filter(b => b.isActive).map(b => (
+                    <SelectItem key={b.id} value={b.id}>
+                      <div className="flex flex-col">
+                        <span>{b.name}</span>
+                        {b.address && <span className="text-xs text-muted-foreground">{b.address}</span>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          </FormGrid>
+        </FormSection>
 
-                      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                        <div className="space-y-2">
-                          <Label>Unidad</Label>
+        <FormSection icon={ItemsIcon} title="Productos">
+          <div className="space-y-4">
+            {formData.items.map((item, index) => (
+              <Card key={index} className="relative">
+                <CardContent className="p-4">
+                  {formData.items.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Quitar producto"
+                      className="absolute top-2 right-2 h-8 w-8"
+                      onClick={() => handleRemoveItem(index)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  <div className="grid gap-4">
+                    <FormGrid>
+                      <FormField label="Producto" required>
+                        <Select value={item.isNewProduct ? '__new__' : item.productId} onValueChange={(v) => handleProductSelect(index, v)}>
+                          <SelectTrigger className={!item.productId && !item.isNewProduct ? 'border-destructive' : ''}>
+                            <SelectValue placeholder="Seleccionar producto del catálogo..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__new__">
+                              <span className="font-medium text-primary">+ Crear producto nuevo</span>
+                            </SelectItem>
+                            {products.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                <div className="flex items-center gap-2">
+                                  <span>{p.name}</span>
+                                  <span className="text-xs text-muted-foreground">({p.sku})</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {!item.productId && !item.isNewProduct && (
+                          <p className="mt-1 text-xs text-destructive">Selecciona un producto del catálogo</p>
+                        )}
+                      </FormField>
+                      {item.isNewProduct ? (
+                        <FormField label="Nombre del producto" required>
                           <Input
-                            value={item.unit}
-                            onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                            placeholder="pza, kg, caja"
-                            disabled={!item.isNewProduct && !!item.productId}
+                            value={item.productName}
+                            onChange={(e) => handleItemChange(index, 'productName', e.target.value)}
+                            placeholder="Nombre del producto nuevo"
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Identificador</Label>
+                        </FormField>
+                      ) : (
+                        <FormField label="Identificador">
                           <Input
                             value={item.sku}
-                            onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
-                            placeholder="SKU-001"
-                            className="font-mono"
+                            readOnly
+                            placeholder="Se completa al seleccionar"
+                            className="bg-muted/50 font-mono text-sm"
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Categoria</Label>
-                          <Select value={item.category} onValueChange={(v) => handleItemChange(index, 'category', v)}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Categoria" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {categories.map(cat => (
-                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Precio de compra *</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unitPrice || ''}
-                            onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            placeholder="0.00"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Cantidad *</Label>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
-                          />
-                        </div>
-                      </div>
+                        </FormField>
+                      )}
+                    </FormGrid>
+                    {item.isNewProduct && (
+                      <p className="text-xs text-muted-foreground">
+                        Este producto se creará como "pendiente de precio" en el inventario. Podrás definir su precio de venta más tarde desde Productos.
+                      </p>
+                    )}
 
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
                       <div className="space-y-2">
-                        <Label>Imagen del producto (opcional)</Label>
-                        <div className="flex items-start gap-4">
-                          {item.imagePreview ? (
-                            <div className="relative">
-                              <img src={item.imagePreview} alt="Preview" className="h-24 w-24 object-cover rounded-lg border" />
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="icon"
-                                className="absolute -top-2 -right-2 h-6 w-6"
-                                onClick={() => handleRemoveImage(index)}
-                              >
-                                <X className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <label className="flex flex-col items-center justify-center h-24 w-24 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
-                              <Upload className="h-6 w-6 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground mt-1">Subir</span>
-                              <input
-                                ref={(el) => { fileInputRefs.current[index] = el; }}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => handleImageUpload(index, e)}
-                              />
-                            </label>
-                          )}
-                        </div>
+                        <Label>Unidad</Label>
+                        <Input
+                          value={item.unit}
+                          onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
+                          placeholder="pza, kg, caja"
+                          disabled={!item.isNewProduct && !!item.productId}
+                        />
                       </div>
-
-                      <div className="flex justify-end pt-2 border-t">
-                        <div className="text-sm">
-                          <span className="text-muted-foreground">Subtotal: </span>
-                          <span className="font-semibold">{formatCurrency(item.quantity * item.unitPrice)}</span>
-                        </div>
+                      <div className="space-y-2">
+                        <Label>Identificador</Label>
+                        <Input
+                          value={item.sku}
+                          onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
+                          placeholder="SKU-001"
+                          className="font-mono"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Categoría</Label>
+                        <Select value={item.category} onValueChange={(v) => handleItemChange(index, 'category', v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Categoría" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map(cat => (
+                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Precio de compra *</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.unitPrice || ''}
+                          onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cantidad *</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
+                        />
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
 
-            <Separator />
+                    <div className="space-y-2">
+                      <Label>Imagen del producto (opcional)</Label>
+                      <div className="flex items-start gap-4">
+                        {item.imagePreview ? (
+                          <div className="relative">
+                            <img src={item.imagePreview} alt="Preview" className="h-24 w-24 rounded-lg border object-cover" />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              aria-label="Quitar imagen"
+                              className="absolute -top-2 -right-2 h-6 w-6"
+                              onClick={() => handleRemoveImage(index)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors hover:bg-muted/50">
+                            <Upload className="h-6 w-6 text-muted-foreground" />
+                            <span className="mt-1 text-xs text-muted-foreground">Subir</span>
+                            <input
+                              ref={(el) => { fileInputRefs.current[index] = el; }}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => handleImageUpload(index, e)}
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
 
-            <Card className="bg-muted/50">
-              <CardHeader>
-                <CardTitle className="text-base">Resumen de la Orden</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Subtotal:</span>
-                  <span>{formatCurrency(calculateSubtotal())}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <label className="flex cursor-pointer items-center gap-2"><input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="h-4 w-4 accent-primary" /><span>IVA (13%):</span></label>
-                  <span>{formatCurrency(calculateTax())}</span>
-                </div>
-                <Separator />
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Total:</span>
-                  <span className="text-primary">{formatCurrency(calculateTotal())}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSubmitCreate} disabled={!isFormValid() || isSubmitting}>
-              {isSubmitting ? 'Creando...' : 'Crear Orden'}
+                    <div className="flex justify-end border-t pt-2">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Subtotal: </span>
+                        <span className="font-semibold">{formatCurrency(item.quantity * item.unitPrice)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+            <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>
+              <Plus className="mr-2 h-4 w-4" />
+              Agregar producto
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </FormSection>
+
+        <FormSection icon={SummaryIcon} title="Resumen de la orden">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Subtotal:</span>
+              <span>{formatCurrency(calculateSubtotal())}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="h-4 w-4 accent-primary" />
+                <span>IVA (13%):</span>
+              </label>
+              <span>{formatCurrency(calculateTax())}</span>
+            </div>
+            <Separator />
+            <div className="flex justify-between text-lg font-bold">
+              <span>Total:</span>
+              <span className="text-primary">{formatCurrency(calculateTotal())}</span>
+            </div>
+          </div>
+        </FormSection>
+      </FormDialog>
 
       <PurchaseOrderDetailDialog
         isOpen={isViewOpen}
