@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from 'react';
+import { FileText, UserRound, Calculator, StickyNote } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { QuotationProductSelector, type QuoteLineItem } from './quotation-product-selector';
 import { Badge } from '@/components/ui/badge';
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { QuotationProductSelector, type QuoteLineItem } from './quotation-product-selector';
 import { CountryCodeCombobox } from '@/components/country-code-combobox';
 import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
 import { joinPhone } from '@/lib/utils/phone';
@@ -24,30 +25,44 @@ export interface QuotationFormData {
 }
 
 interface QuotationFormProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSubmit: (data: QuotationFormData) => void;
   isLoading?: boolean;
 }
 
 const TAX_RATE = 0.16; // 16% VAT (IVA)
 
-export function QuotationForm({ onSubmit, isLoading = false }: QuotationFormProps) {
+const INITIAL_DATA: QuotationFormData = {
+  clientName: '',
+  clientCompany: '',
+  clientNIT: '',
+  clientPhone: '',
+  clientEmail: '',
+  clientAddress: '',
+  items: [],
+  discount: 0,
+  notes: '',
+};
+
+export function QuotationForm({ open, onOpenChange, onSubmit, isLoading = false }: QuotationFormProps) {
   const [phoneCountryCode, setPhoneCountryCode] = useState(DEFAULT_DIAL_CODE);
-  const [formData, setFormData] = useState<QuotationFormData>({
-    clientName: '',
-    clientCompany: '',
-    clientNIT: '',
-    clientPhone: '',
-    clientEmail: '',
-    clientAddress: '',
-    items: [],
-    discount: 0,
-    notes: '',
-  });
+  const [formData, setFormData] = useState<QuotationFormData>(INITIAL_DATA);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Al abrir el diálogo, el formulario empieza limpio.
+  useEffect(() => {
+    if (open) {
+      setFormData(INITIAL_DATA);
+      setPhoneCountryCode(DEFAULT_DIAL_CODE);
+      setFormError(null);
+    }
+  }, [open]);
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-MX', {
+    return new Intl.NumberFormat('es-BO', {
       style: 'currency',
-      currency: 'MXN',
+      currency: 'BOB',
       minimumFractionDigits: 0,
     }).format(value);
   };
@@ -60,208 +75,195 @@ export function QuotationForm({ onSubmit, isLoading = false }: QuotationFormProp
   const total = subtotalAfterDiscount + tax;
 
   const handleFieldChange = (field: keyof QuotationFormData, value: any) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
   };
 
   const handleAddItem = (item: QuoteLineItem) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       items: [...prev.items, item],
     }));
   };
 
   const handleRemoveItem = (id: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      items: prev.items.filter(item => item.id !== id),
+      items: prev.items.filter((item) => item.id !== id),
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: { preventDefault?: () => void }) => {
+    e?.preventDefault?.();
 
-    if (!formData.clientName.trim() || !formData.clientPhone.trim() || !formData.items.length) {
-      alert('Por favor completa todos los campos requeridos y agrega al menos un producto');
+    if (!formData.clientName.trim() || !formData.clientPhone.trim()) {
+      setFormError('Completa el nombre y el teléfono del cliente.');
+      return;
+    }
+    if (formData.items.length === 0) {
+      setFormError('Agrega al menos un producto a la cotización.');
       return;
     }
 
+    setFormError(null);
     onSubmit({ ...formData, clientPhone: joinPhone(phoneCountryCode, formData.clientPhone) });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Client Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Información del Cliente</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">Nombre Completo *</label>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      icon={FileText}
+      title="Crear Nueva Cotización"
+      description="Completa la información del cliente y selecciona los productos."
+      size="xl"
+      submitLabel="Crear presupuesto"
+      onSubmit={handleSubmit}
+      isSubmitting={isLoading}
+      submitDisabled={formData.items.length === 0}
+      error={formError}
+    >
+      <FormSection icon={UserRound} title="Información del cliente">
+        <FormGrid>
+          <FormField label="Nombre completo" htmlFor="quote-client-name" required>
+            <Input
+              id="quote-client-name"
+              value={formData.clientName}
+              onChange={(e) => handleFieldChange('clientName', e.target.value)}
+              placeholder="Ej: Juan García"
+            />
+          </FormField>
+          <FormField label="Empresa" htmlFor="quote-client-company">
+            <Input
+              id="quote-client-company"
+              value={formData.clientCompany}
+              onChange={(e) => handleFieldChange('clientCompany', e.target.value)}
+              placeholder="Ej: Tech Solutions Inc."
+            />
+          </FormField>
+          <FormField label="NIT/RFC" htmlFor="quote-client-nit">
+            <Input
+              id="quote-client-nit"
+              value={formData.clientNIT}
+              onChange={(e) => handleFieldChange('clientNIT', e.target.value)}
+              placeholder="Ej: 123456789-0"
+            />
+          </FormField>
+          <FormField label="Teléfono" htmlFor="quote-client-phone" required>
+            <div className="flex gap-2">
+              <CountryCodeCombobox
+                value={phoneCountryCode}
+                onChange={setPhoneCountryCode}
+                disabled={isLoading}
+              />
               <Input
-                required
-                value={formData.clientName}
-                onChange={(e) => handleFieldChange('clientName', e.target.value)}
-                placeholder="Ej: Juan García"
+                id="quote-client-phone"
+                type="tel"
+                aria-label="Número de teléfono del cliente"
+                autoComplete="tel-national"
+                value={formData.clientPhone}
+                onChange={(e) => handleFieldChange('clientPhone', e.target.value)}
+                placeholder="Ej: 70000000"
+                className="min-w-0"
+                disabled={isLoading}
               />
             </div>
-            <div>
-              <label className="text-sm font-medium">Empresa</label>
-              <Input
-                value={formData.clientCompany}
-                onChange={(e) => handleFieldChange('clientCompany', e.target.value)}
-                placeholder="Ej: Tech Solutions Inc."
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">NIT/RFC</label>
-              <Input
-                value={formData.clientNIT}
-                onChange={(e) => handleFieldChange('clientNIT', e.target.value)}
-                placeholder="Ej: 123456789-0"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Teléfono *</label>
-              <div className="flex gap-2">
-                <CountryCodeCombobox
-                  value={phoneCountryCode}
-                  onChange={setPhoneCountryCode}
-                  disabled={isLoading}
-                />
-                <Input
-                  required
-                  type="tel"
-                  aria-label="Número de teléfono del cliente"
-                  autoComplete="tel-national"
-                  value={formData.clientPhone}
-                  onChange={(e) => handleFieldChange('clientPhone', e.target.value)}
-                  placeholder="Ej: 70000000"
-                  className="min-w-0"
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                type="email"
-                value={formData.clientEmail}
-                onChange={(e) => handleFieldChange('clientEmail', e.target.value)}
-                placeholder="Ej: cliente@empresa.com"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Dirección</label>
-              <Input
-                value={formData.clientAddress}
-                onChange={(e) => handleFieldChange('clientAddress', e.target.value)}
-                placeholder="Ej: Calle Principal 123, Apartamento 4B"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </FormField>
+          <FormField label="Email" htmlFor="quote-client-email">
+            <Input
+              id="quote-client-email"
+              type="email"
+              value={formData.clientEmail}
+              onChange={(e) => handleFieldChange('clientEmail', e.target.value)}
+              placeholder="Ej: cliente@empresa.com"
+            />
+          </FormField>
+          <FormField label="Dirección" htmlFor="quote-client-address">
+            <Input
+              id="quote-client-address"
+              value={formData.clientAddress}
+              onChange={(e) => handleFieldChange('clientAddress', e.target.value)}
+              placeholder="Ej: Calle Principal 123, Apartamento 4B"
+            />
+          </FormField>
+        </FormGrid>
+      </FormSection>
 
-      {/* Product Selection */}
       <QuotationProductSelector
         items={formData.items}
         onAddItem={handleAddItem}
         onRemoveItem={handleRemoveItem}
         onUpdateItem={(item) => {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
-            items: prev.items.map(i => (i.id === item.id ? item : i)),
+            items: prev.items.map((i) => (i.id === item.id ? item : i)),
           }));
         }}
       />
 
-      {/* Pricing Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Resumen de Presupuesto</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium">Descuento (%)</label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={formData.discount}
-                onChange={(e) => handleFieldChange('discount', parseFloat(e.target.value) || 0)}
-                placeholder="0"
-              />
-            </div>
-            <div className="flex flex-col justify-end">
-              <p className="text-sm text-muted-foreground">
-                Descuento: {formatCurrency(discountAmount)}
-              </p>
-            </div>
+      <FormSection icon={Calculator} title="Resumen de presupuesto">
+        <FormGrid>
+          <FormField label="Descuento (%)" htmlFor="quote-discount">
+            <Input
+              id="quote-discount"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={formData.discount}
+              onChange={(e) => handleFieldChange('discount', parseFloat(e.target.value) || 0)}
+              placeholder="0"
+            />
+          </FormField>
+          <div className="flex flex-col justify-end pb-2">
+            <p className="text-sm text-muted-foreground">
+              Descuento: {formatCurrency(discountAmount)}
+            </p>
           </div>
+        </FormGrid>
 
-          {/* Totals */}
-          <div className="space-y-2 pt-4 border-t">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal:</span>
-              <span className="font-medium">{formatCurrency(subtotal)}</span>
-            </div>
-            {formData.discount > 0 && (
-              <div className="flex justify-between text-sm text-yellow-600">
-                <span>Descuento ({formData.discount}%):</span>
-                <span className="font-medium">-{formatCurrency(discountAmount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">IVA (16%):</span>
-              <span className="font-medium">{formatCurrency(tax)}</span>
-            </div>
-            <div className="flex justify-between text-lg pt-2 border-t">
-              <span className="font-semibold">Total:</span>
-              <span className="font-bold text-primary">{formatCurrency(total)}</span>
-            </div>
+        <div className="mt-4 space-y-2 border-t pt-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Subtotal:</span>
+            <span className="font-medium">{formatCurrency(subtotal)}</span>
           </div>
-
-          {/* Stats */}
-          <div className="flex gap-2 pt-4 border-t">
-            <Badge variant="secondary">{formData.items.length} productos</Badge>
-            <Badge variant="secondary">
-              {formData.items.reduce((sum, item) => sum + item.quantity, 0)} unidades
-            </Badge>
+          {formData.discount > 0 && (
+            <div className="flex justify-between text-sm text-yellow-600">
+              <span>Descuento ({formData.discount}%):</span>
+              <span className="font-medium">-{formatCurrency(discountAmount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">IVA (16%):</span>
+            <span className="font-medium">{formatCurrency(tax)}</span>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex justify-between border-t pt-2 text-lg">
+            <span className="font-semibold">Total:</span>
+            <span className="font-bold text-primary">{formatCurrency(total)}</span>
+          </div>
+        </div>
 
-      {/* Notes */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Observaciones</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className="mt-4 flex gap-2 border-t pt-4">
+          <Badge variant="secondary">{formData.items.length} productos</Badge>
+          <Badge variant="secondary">
+            {formData.items.reduce((sum, item) => sum + item.quantity, 0)} unidades
+          </Badge>
+        </div>
+      </FormSection>
+
+      <FormSection icon={StickyNote} title="Observaciones">
+        <FormField label="Observaciones (opcional)" htmlFor="quote-notes">
           <Textarea
+            id="quote-notes"
             value={formData.notes}
             onChange={(e) => handleFieldChange('notes', e.target.value)}
             placeholder="Términos de pago, condiciones especiales, etc..."
             rows={4}
           />
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex gap-2">
-        <Button type="submit" disabled={isLoading || formData.items.length === 0}>
-          {isLoading ? 'Creando...' : 'Crear Presupuesto'}
-        </Button>
-        <Button type="button" variant="outline" disabled={isLoading}>
-          Guardar como Borrador
-        </Button>
-      </div>
-    </form>
+        </FormField>
+      </FormSection>
+    </FormDialog>
   );
 }

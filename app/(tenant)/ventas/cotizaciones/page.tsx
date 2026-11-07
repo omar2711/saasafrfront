@@ -176,15 +176,12 @@ export default function QuotesPage() {
 
       {error && <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Crear Nueva Cotización</DialogTitle>
-            <DialogDescription>Completa la información del cliente y selecciona los productos</DialogDescription>
-          </DialogHeader>
-          <QuotationForm onSubmit={handleCreateQuote} isLoading={isSaving} />
-        </DialogContent>
-      </Dialog>
+      <QuotationForm
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onSubmit={handleCreateQuote}
+        isLoading={isSaving}
+      />
 
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
