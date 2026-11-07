@@ -1,7 +1,7 @@
 'use client';
 
 import { FormSection, FormGrid, FormField } from '@/components/form-layout';
-import { Phone as PhoneIcon, MapPin as PinIcon, Globe as GlobeIcon, FileText as TermsIcon } from 'lucide-react';
+import { Phone as PhoneIcon, MapPin as PinIcon, Globe as GlobeIcon } from 'lucide-react';
 
 import { PhoneField } from '@/components/phone-field';
 import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
@@ -9,15 +9,9 @@ import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Building2, Clock, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
+import { Building2, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -39,7 +33,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/page-header';
 import { organizationsApi, type WorkScheduleDto } from '@/lib/api/organizations';
 import { rolesApi, type RoleDto } from '@/lib/api/users';
@@ -101,8 +94,6 @@ function ConfiguracionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') === 'horario' ? 'horario' : 'general';
-  const setTab = (value: string) =>
-    router.replace(value === 'horario' ? '?tab=horario' : '?tab=general', { scroll: false });
 
   const [orgForm, setOrgForm] = useState<OrgForm>(EMPTY_ORG);
   const [schedule, setSchedule] = useState<WorkScheduleDto | null>(null);
@@ -264,8 +255,8 @@ function ConfiguracionContent() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Configuración"
-        description="Datos de la empresa y horario de atención"
+        title={tab === 'horario' ? 'Horario laboral' : 'Datos de la empresa'}
+        description={tab === 'horario' ? 'Define los días y horas en que tu equipo puede entrar y operar.' : 'Información de tu empresa. Se imprime en los comprobantes de venta.'}
       />
 
       {error && (
@@ -275,24 +266,10 @@ function ConfiguracionContent() {
         <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{success}</div>
       )}
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="general">Datos de la empresa</TabsTrigger>
-          <TabsTrigger value="horario">Horario laboral</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="general" className="space-y-6">
+      {tab === 'general' && (
+<div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Información de la empresa
-              </CardTitle>
-              <CardDescription>
-                Estos datos se imprimen en los comprobantes de venta.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
               <FormSection icon={Building2} title="Datos generales">
                 <FormGrid>
                   <FormField label="Nombre" htmlFor="org-name" required>
@@ -377,22 +354,6 @@ function ConfiguracionContent() {
                 </FormField>
               </FormSection>
 
-              <FormSection icon={TermsIcon} title="Comprobantes">
-                <FormField
-                  label="Condiciones de venta adelantada"
-                  htmlFor="org-terms"
-                  hint="Se imprime en el comprobante cuando la venta tiene entrega pendiente."
-                >
-                  <Textarea
-                    id="org-terms"
-                    rows={4}
-                    value={orgForm.advanceSaleTerms}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, advanceSaleTerms: e.target.value }))}
-                    placeholder="Ej: El anticipo no es reembolsable. La entrega se realiza contrapago del saldo."
-                    disabled={!canWriteSettings}
-                  />
-                </FormField>
-              </FormSection>
 
               <div className="flex justify-end border-t pt-4">
                 <Button
@@ -410,20 +371,13 @@ function ConfiguracionContent() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+)}
 
-        <TabsContent value="horario" className="space-y-6">
+        {tab === 'horario' && (
+<div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Horario laboral
-              </CardTitle>
-              <CardDescription>
-                Fuera de este horario nadie puede iniciar sesión ni seguir operando.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
               {schedule && (
                 <>
                   {/* Estado en vivo: configurar el horario sin ver el efecto era
@@ -566,7 +520,7 @@ function ConfiguracionContent() {
                     <button
                       type="button"
                       className="underline underline-offset-2"
-                      onClick={() => setTab('general')}
+                      onClick={() => router.push('/mi-tienda/configuracion?tab=general')}
                     >
                       Cambiarla en Datos de la empresa
                     </button>
@@ -664,8 +618,8 @@ function ConfiguracionContent() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+)}
 
       {/* El mismo aviso que ve el empleado al intentar entrar fuera de hora. */}
       <AlertDialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
