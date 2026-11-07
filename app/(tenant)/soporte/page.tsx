@@ -1,5 +1,9 @@
 'use client';
 
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { LifeBuoy as TicketIcon, MessageSquareText as MessageIcon } from 'lucide-react';
+
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, Mail, MessageCircle, Plus, Wifi, WifiOff } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -300,27 +304,28 @@ export default function SupportPage() {
         />
       </div>
 
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle>Nuevo ticket de soporte</DialogTitle>
-            <DialogDescription>
-              Describe el problema con el mayor detalle posible. El equipo responde en este mismo
-              hilo.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="ticket-subject">Asunto *</Label>
+      <FormDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        icon={TicketIcon}
+        title="Nuevo ticket de soporte"
+        description="Describe el problema con el mayor detalle posible. El equipo responde en este mismo hilo."
+        size="md"
+        submitLabel="Abrir ticket"
+        onSubmit={handleCreate}
+        isSubmitting={isCreating}
+      >
+        <FormSection icon={TicketIcon} title="Resumen">
+          <FormGrid>
+            <FormField label="Asunto" htmlFor="ticket-subject" required className="sm:col-span-2">
               <Input
                 id="ticket-subject"
                 value={newSubject}
                 onChange={(e) => setNewSubject(e.target.value)}
                 placeholder="Ej: El recibo se corta al imprimir en A4"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ticket-priority">Prioridad</Label>
+            </FormField>
+            <FormField label="Prioridad" htmlFor="ticket-priority">
               <Select
                 value={newPriority}
                 onValueChange={(value) => setNewPriority(value as TicketPriority)}
@@ -336,29 +341,22 @@ export default function SupportPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ticket-body">Mensaje *</Label>
-              <Textarea
-                id="ticket-body"
-                rows={5}
-                value={newBody}
-                onChange={(e) => setNewBody(e.target.value)}
-                placeholder="Qué hiciste, qué esperabas y qué pasó."
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={isCreating}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreate} disabled={isCreating}>
-              {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Abrir ticket
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </FormField>
+          </FormGrid>
+        </FormSection>
+
+        <FormSection icon={MessageIcon} title="Detalle del problema">
+          <FormField label="Mensaje" htmlFor="ticket-body" required>
+            <Textarea
+              id="ticket-body"
+              rows={5}
+              value={newBody}
+              onChange={(e) => setNewBody(e.target.value)}
+              placeholder="Qué hiciste, qué esperabas y qué pasó."
+            />
+          </FormField>
+        </FormSection>
+      </FormDialog>
     </div>
   );
 }
