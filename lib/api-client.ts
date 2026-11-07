@@ -99,6 +99,45 @@ export class ApiError extends Error {
   }
 }
 
+const REFRESH_PATH = '/auth/refresh';
+let refreshing: Promise<string | null> | null = null;
+
+/** Pide un access token nuevo. Una sola renovación a la vez: el backend rota el refresh token. */
+function refreshAccessToken(): Promise<string | null> {
+  if (refreshing) return refreshing;
+  const attempt = (async (): Promise<string | null> => {
+    if (typeof window === 'undefined') return null;
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${API_BASE_URL}${REFRESH_PATH}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        cache: 'no-store',
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data?.accessToken) return null;
+      localStorage.setItem('access_token', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
+      return data.accessToken as string;
+    } catch {
+      return null;
+    }
+  })();
+  refreshing = attempt.finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+/** Sesión vencida del todo: se limpian los datos y se vuelve al login. */
+function endSession() {
+  clearAuth();
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
+}
+
 export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
@@ -124,12 +163,25 @@ export async function apiRequest<T = unknown>(
   }
 
   const load = async (): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}/${path.replace(/^\/+/, '')}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: 'no-store',
-    });
+    const send = (authToken: string | null) =>
+      fetch(`${API_BASE_URL}/${path.replace(/^\/+/, '')}`, {
+        method,
+        headers: authToken ? { ...headers, Authorization: `Bearer ${authToken}` } : headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        cache: 'no-store',
+      });
+
+    let response = await send(token);
+
+    // Access token vencido: se renueva solo y se repite la petición.
+    if (response.status === 401 && token && !path.replace(/^\/+/, '').startsWith('auth/')) {
+      const fresh = await refreshAccessToken();
+      if (fresh) {
+        response = await send(fresh);
+      } else {
+        endSession();
+      }
+    }
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({ message: response.statusText }));
