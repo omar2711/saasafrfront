@@ -676,7 +676,7 @@ export default function POSPage() {
           {!lastSaleNumber && outOfRangeItems.length > 0 && !canOverridePrice && (
             <div className="w-full mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
               Hay {outOfRangeItems.length} linea(s) con un precio fuera del rango autorizado. Corrige
-              el precio o pide a un Gerente que autorice la venta.
+              el precio o pide a un Propietario que autorice la venta.
             </div>
           )}
 

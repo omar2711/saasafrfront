@@ -302,7 +302,7 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
               className={errors.minSalePrice ? 'border-red-500' : ''}
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Vacío = sin límite. Solo un Gerente puede vender por debajo.
+              Vacío = sin límite. Solo un Propietario puede vender por debajo.
             </p>
             {errors.minSalePrice && <p className="mt-1 text-xs text-red-500">{errors.minSalePrice}</p>}
           </FormField>

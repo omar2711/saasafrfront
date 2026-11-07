@@ -148,7 +148,10 @@ export async function apiRequest<T = unknown>(
       return undefined as T;
     }
 
-    return response.json() as Promise<T>;
+    // Algunos endpoints (p. ej. DELETE) responden 200 con el cuerpo vacío:
+    // response.json() fallaría con "Unexpected end of JSON input".
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   };
   if (method !== 'GET') {
     try { return await load(); }

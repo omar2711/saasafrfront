@@ -85,7 +85,7 @@ export default function BranchesPage() {
   }, []);
 
   /*
-   * Los candidatos a encargado necesitan `users.read`, que el Gerente tiene pero
+   * Los candidatos a encargado necesitan `users.read`, que el Propietario tiene pero
    * un rol a medida con `settings.write` podría no tener. Si falla, se oculta el
    * selector y el resto del formulario sigue funcionando (managers = null).
    */

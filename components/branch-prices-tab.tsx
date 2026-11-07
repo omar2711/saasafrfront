@@ -194,7 +194,7 @@ export function BranchPricesTab() {
         <p className="text-sm text-muted-foreground">
           Precio de venta efectivo por sucursal. Deja un campo vacío para heredar el valor global.
           Los campos min y max acotan a cuánto se puede vender: salirse del rango exige el permiso
-          de Gerente.
+          de Propietario.
         </p>
       </div>
 
