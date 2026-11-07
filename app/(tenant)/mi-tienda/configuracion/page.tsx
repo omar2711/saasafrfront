@@ -1,5 +1,12 @@
 'use client';
 
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { Phone as PhoneIcon, MapPin as PinIcon, Globe as GlobeIcon, FileText as TermsIcon } from 'lucide-react';
+
+import { PhoneField } from '@/components/phone-field';
+import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
+import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
+
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2, Clock, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
@@ -67,6 +74,7 @@ interface OrgForm {
   taxId: string;
   timezone: string;
   address: string;
+  phoneCountryCode: string;
   phone: string;
   email: string;
   advanceSaleTerms: string;
@@ -77,6 +85,7 @@ const EMPTY_ORG: OrgForm = {
   taxId: '',
   timezone: 'America/La_Paz',
   address: '',
+  phoneCountryCode: DEFAULT_DIAL_CODE,
   phone: '',
   email: '',
   advanceSaleTerms: '',
@@ -134,7 +143,7 @@ function ConfiguracionContent() {
         taxId: org.taxId ?? '',
         timezone: org.timezone,
         address: org.address ?? '',
-        phone: org.phone ?? '',
+        ...splitPhone(org.phone),
         email: org.email ?? '',
         advanceSaleTerms: org.advanceSaleTerms ?? '',
       });
@@ -153,6 +162,8 @@ function ConfiguracionContent() {
 
   const handleSaveOrg = async () => {
     if (!organization) return;
+    const phoneError = validatePhone(orgForm.phoneCountryCode, orgForm.phone);
+    if (phoneError) { setError(phoneError); return; }
     setIsSavingOrg(true);
     setError('');
     setSuccess('');
@@ -162,7 +173,7 @@ function ConfiguracionContent() {
         taxId: orgForm.taxId.trim() || undefined,
         timezone: orgForm.timezone,
         address: orgForm.address.trim() || undefined,
-        phone: orgForm.phone.trim() || undefined,
+        phone: joinPhone(orgForm.phoneCountryCode, orgForm.phone) || undefined,
         email: orgForm.email.trim() || undefined,
         // Se manda siempre, incluso vacío: vaciar las condiciones es una acción
         // legítima y el backend distingue "ausente" de "vacío".
@@ -281,110 +292,120 @@ function ConfiguracionContent() {
                 Estos datos se imprimen en los comprobantes de venta.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="org-name">Nombre *</Label>
-                  <Input
-                    id="org-name"
-                    value={orgForm.name}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, name: e.target.value }))}
-                    disabled={!canWriteSettings}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-taxid">NIT</Label>
-                  <Input
-                    id="org-taxid"
-                    className="font-mono"
-                    value={orgForm.taxId}
-                    onChange={(e) =>
-                      setOrgForm((p) => ({ ...p, taxId: e.target.value.toUpperCase() }))
+            <CardContent className="space-y-6">
+              <FormSection icon={Building2} title="Datos generales">
+                <FormGrid>
+                  <FormField label="Nombre" htmlFor="org-name" required>
+                    <Input
+                      id="org-name"
+                      value={orgForm.name}
+                      onChange={(e) => setOrgForm((p) => ({ ...p, name: e.target.value }))}
+                      disabled={!canWriteSettings}
+                    />
+                  </FormField>
+                  <FormField label="NIT" htmlFor="org-taxid">
+                    <Input
+                      id="org-taxid"
+                      className="font-mono"
+                      value={orgForm.taxId}
+                      onChange={(e) =>
+                        setOrgForm((p) => ({ ...p, taxId: e.target.value.toUpperCase() }))
+                      }
+                      disabled={!canWriteSettings}
+                    />
+                  </FormField>
+                </FormGrid>
+              </FormSection>
+
+              <FormSection icon={PhoneIcon} title="Contacto">
+                <FormGrid>
+                  <PhoneField
+                    id="org-phone"
+                    label="Teléfono"
+                    code={orgForm.phoneCountryCode}
+                    number={orgForm.phone}
+                    onChange={(code, number) =>
+                      setOrgForm((p) => ({ ...p, phoneCountryCode: code, phone: number }))
                     }
                     disabled={!canWriteSettings}
                   />
-                </div>
-              </div>
+                  <FormField label="Correo" htmlFor="org-email">
+                    <Input
+                      id="org-email"
+                      type="email"
+                      value={orgForm.email}
+                      onChange={(e) => setOrgForm((p) => ({ ...p, email: e.target.value }))}
+                      disabled={!canWriteSettings}
+                    />
+                  </FormField>
+                </FormGrid>
+              </FormSection>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="org-phone">Teléfono</Label>
+              <FormSection icon={PinIcon} title="Ubicación">
+                <FormField label="Dirección" htmlFor="org-address">
                   <Input
-                    id="org-phone"
-                    value={orgForm.phone}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, phone: e.target.value }))}
+                    id="org-address"
+                    value={orgForm.address}
+                    onChange={(e) => setOrgForm((p) => ({ ...p, address: e.target.value }))}
                     disabled={!canWriteSettings}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-email">Correo</Label>
-                  <Input
-                    id="org-email"
-                    type="email"
-                    value={orgForm.email}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, email: e.target.value }))}
-                    disabled={!canWriteSettings}
-                  />
-                </div>
-              </div>
+                </FormField>
+              </FormSection>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-address">Dirección</Label>
-                <Input
-                  id="org-address"
-                  value={orgForm.address}
-                  onChange={(e) => setOrgForm((p) => ({ ...p, address: e.target.value }))}
-                  disabled={!canWriteSettings}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="org-timezone">Zona horaria</Label>
-                <Select
-                  value={orgForm.timezone}
-                  onValueChange={(value) => setOrgForm((p) => ({ ...p, timezone: value }))}
-                  disabled={!canWriteSettings}
+              <FormSection icon={GlobeIcon} title="Regional">
+                <FormField
+                  label="Zona horaria"
+                  htmlFor="org-timezone"
+                  hint="Define cómo se leen todas las fechas del sistema y a qué hora empieza y termina el horario laboral. No es la zona del navegador."
                 >
-                  <SelectTrigger id="org-timezone" className="max-w-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIMEZONES.map((tz) => (
-                      <SelectItem key={tz} value={tz}>
-                        {tz}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Define cómo se leen todas las fechas del sistema y a qué hora empieza y termina el
-                  horario laboral. No es la zona del navegador.
-                </p>
-              </div>
+                  <Select
+                    value={orgForm.timezone}
+                    onValueChange={(value) => setOrgForm((p) => ({ ...p, timezone: value }))}
+                    disabled={!canWriteSettings}
+                  >
+                    <SelectTrigger id="org-timezone" className="max-w-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEZONES.map((tz) => (
+                        <SelectItem key={tz} value={tz}>
+                          {tz}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              </FormSection>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-terms">Condiciones de venta adelantada</Label>
-                <Textarea
-                  id="org-terms"
-                  rows={4}
-                  value={orgForm.advanceSaleTerms}
-                  onChange={(e) => setOrgForm((p) => ({ ...p, advanceSaleTerms: e.target.value }))}
-                  placeholder="Ej: El anticipo no es reembolsable. La entrega se realiza contra pago del saldo."
-                  disabled={!canWriteSettings}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Se imprime en el comprobante cuando la venta tiene entrega pendiente.
-                </p>
-              </div>
+              <FormSection icon={TermsIcon} title="Comprobantes">
+                <FormField
+                  label="Condiciones de venta adelantada"
+                  htmlFor="org-terms"
+                  hint="Se imprime en el comprobante cuando la venta tiene entrega pendiente."
+                >
+                  <Textarea
+                    id="org-terms"
+                    rows={4}
+                    value={orgForm.advanceSaleTerms}
+                    onChange={(e) => setOrgForm((p) => ({ ...p, advanceSaleTerms: e.target.value }))}
+                    placeholder="Ej: El anticipo no es reembolsable. La entrega se realiza contrapago del saldo."
+                    disabled={!canWriteSettings}
+                  />
+                </FormField>
+              </FormSection>
 
-              <div className="flex justify-end">
-                <Button onClick={handleSaveOrg} disabled={!canWriteSettings || isSavingOrg}>
+              <div className="flex justify-end border-t pt-4">
+                <Button
+                  onClick={handleSaveOrg}
+                  disabled={!canWriteSettings || isSavingOrg}
+                  className="min-w-[140px]"
+                >
                   {isSavingOrg ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Save className="mr-2 h-4 w-4" />
                   )}
-                  Guardar
+                  Guardar cambios
                 </Button>
               </div>
             </CardContent>

@@ -18,7 +18,9 @@ import { CustomerForm, emptyCustomerFormData, type CustomerFormData } from '@/co
 import { customersApi, type CustomerDto } from '@/lib/api/customers';
 import { CountryCodeCombobox } from '@/components/country-code-combobox';
 import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
-import { joinPhone } from '@/lib/utils/phone';
+import { joinPhone, validatePhone } from '@/lib/utils/phone';
+import { PhoneField } from '@/components/phone-field';
+import { FormGrid, FormField } from '@/components/form-layout';
 
 /** Cliente asociado a la venta en curso. Sin customerId es un cliente ocasional. */
 export interface PosCustomer {
@@ -176,44 +178,55 @@ export function PosCustomerDialog({ isOpen, onSelect, onCancel }: PosCustomerDia
             </div>
           </TabsContent>
 
-          <TabsContent value="ocasional" className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label htmlFor="walkin-name">Nombre *</Label>
-              <Input
-                id="walkin-name"
-                value={walkInName}
-                onChange={(e) => setWalkInName(e.target.value)}
-                placeholder="Ej: Juan Perez"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="walkin-nit">CI / NIT</Label>
-              <Input
-                id="walkin-nit"
-                value={walkInNit}
-                onChange={(e) => setWalkInNit(e.target.value.toUpperCase())}
-                placeholder="Ej: 1234567"
-                className="font-mono"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="walkin-phone">Telefono</Label>
-              <div className="flex gap-2">
-                <CountryCodeCombobox value={walkInDialCode} onChange={setWalkInDialCode} />
-                <Input
-                  id="walkin-phone"
-                  type="tel"
-                  value={walkInPhone}
-                  onChange={(e) => setWalkInPhone(e.target.value)}
-                  placeholder="70000000"
-                />
+          <TabsContent value="ocasional" className="pt-4">
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                confirmWalkIn();
+              }}
+            >
+              <FormGrid>
+                <FormField label="Nombre" htmlFor="walkin-name" required className="sm:col-span-2">
+                  <Input
+                    id="walkin-name"
+                    value={walkInName}
+                    onChange={(e) => setWalkInName(e.target.value)}
+                    placeholder="Ej: Juan Pérez"
+                  />
+                </FormField>
+                <FormField label="CI / NIT" htmlFor="walkin-nit" className="sm:col-span-2">
+                  <Input
+                    id="walkin-nit"
+                    value={walkInNit}
+                    onChange={(e) => setWalkInNit(e.target.value.toUpperCase())}
+                    placeholder="Ej: 1234567"
+                    className="font-mono"
+                  />
+                </FormField>
+                <div className="sm:col-span-2">
+                  <PhoneField
+                    id="walkin-phone"
+                    label="Teléfono"
+                    code={walkInDialCode}
+                    number={walkInPhone}
+                    onChange={(code, number) => {
+                      setWalkInDialCode(code);
+                      setWalkInPhone(number);
+                    }}
+                  />
+                </div>
+              </FormGrid>
+              <div className="flex justify-end border-t pt-4">
+                <Button
+                  type="submit"
+                  className="min-w-[140px]"
+                  disabled={!walkInName.trim() || Boolean(validatePhone(walkInDialCode, walkInPhone))}
+                >
+                  Usar estos datos
+                </Button>
               </div>
-            </div>
-            <DialogFooter>
-              <Button onClick={confirmWalkIn} disabled={!walkInName.trim()}>
-                Usar estos datos
-              </Button>
-            </DialogFooter>
+            </form>
           </TabsContent>
 
           <TabsContent value="nuevo" className="pt-2">

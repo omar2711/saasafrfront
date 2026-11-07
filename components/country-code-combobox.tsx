@@ -1,5 +1,7 @@
 'use client';
 
+import 'flag-icons/css/flag-icons.min.css';
+
 import { useEffect, useState } from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -72,7 +74,7 @@ export function CountryCodeCombobox({
           className={cn('w-[130px] shrink-0 justify-between font-normal', className)}
         >
           <span className="truncate">
-            {selected ? `${selected.flag} ${selected.dialCode}` : value}
+            {selected ? (<span className="flex items-center gap-2"><span className={`fi fi-${selected.iso2.toLowerCase()}`} />{selected.dialCode}</span>) : value}
           </span>
           <ChevronsUpDown className="ml-1 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -107,7 +109,7 @@ export function CountryCodeCombobox({
                       country.iso2 === iso2 ? 'opacity-100' : 'opacity-0',
                     )}
                   />
-                  <span className="mr-2">{country.flag}</span>
+                  <span className={`fi fi-${country.iso2.toLowerCase()} mr-2`} />
                   <span className="flex-1 truncate">{country.name}</span>
                   <span className="text-muted-foreground tabular-nums">{country.dialCode}</span>
                 </CommandItem>

@@ -1,5 +1,8 @@
 'use client';
 
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { FormDialog } from '@/components/form-dialog';
+
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, MapPin, Phone, MoreHorizontal, Building2, Loader2, UserRound, Star } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -32,8 +35,12 @@ import {
 import { organizationsApi, type BranchDto } from '@/lib/api/organizations';
 import { usersApi, membershipsApi } from '@/lib/api/users';
 import { formatDate } from '@/lib/format';
+import { PhoneField } from '@/components/phone-field';
+import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
+import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
 
 interface BranchFormState {
+  phoneCountryCode: string;
   name: string;
   address: string;
   city: string;
@@ -51,6 +58,7 @@ interface ManagerOption {
 const NO_MANAGER = '__none__';
 
 const EMPTY_FORM: BranchFormState = {
+  phoneCountryCode: DEFAULT_DIAL_CODE,
   name: '',
   address: '',
   city: '',
@@ -128,7 +136,7 @@ export default function BranchesPage() {
       name: branch.name,
       address: branch.address ?? '',
       city: branch.city ?? '',
-      phone: branch.phone ?? '',
+      ...splitPhone(branch.phone),
       managerMemberId: branch.managerMemberId ?? NO_MANAGER,
     });
     setFormError('');
@@ -138,6 +146,7 @@ export default function BranchesPage() {
   const handleSave = async () => {
     setFormError('');
     if (!form.name.trim()) { setFormError('El nombre es requerido'); return; }
+    if (validatePhone(form.phoneCountryCode, form.phone)) { setFormError('Revisa el teléfono'); return; }
 
     setIsSaving(true);
     try {
@@ -147,7 +156,7 @@ export default function BranchesPage() {
         name: form.name.trim(),
         address: form.address.trim() || undefined,
         city: form.city.trim() || undefined,
-        phone: form.phone.trim() || undefined,
+        phone: joinPhone(form.phoneCountryCode, form.phone) || undefined,
       };
 
       if (editingBranch) {
@@ -188,47 +197,33 @@ export default function BranchesPage() {
         </Button>
       </PageHeader>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingBranch ? 'Editar Sucursal' : 'Nueva Sucursal'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label>Nombre</Label>
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        icon={Building2}
+        title={editingBranch ? 'Editar Sucursal' : 'Nueva Sucursal'}
+        description="Completa los datos de la sucursal."
+        submitLabel={editingBranch ? 'Guardar cambios' : 'Crear sucursal'}
+        onSubmit={handleSave}
+        isSubmitting={isSaving}
+        error={formError}
+      >
+        <FormSection icon={Building2} title="Datos generales">
+          <FormGrid>
+            <FormField label="Nombre" htmlFor="branch-name" required className="sm:col-span-2">
               <Input
+                id="branch-name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Sucursal Central"
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Dirección (opcional)</Label>
-              <Input
-                value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="Av. Principal N°123"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Ciudad (opcional)</Label>
-              <Input
-                value={form.city}
-                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                placeholder="Santa Cruz de la Sierra"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Teléfono (opcional)</Label>
-              <Input
-                value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                placeholder="+591 3-XXXXXXX"
-              />
-            </div>
+            </FormField>
             {managers !== null && (
-              <div className="space-y-1.5">
-                <Label>Encargado / dueño (opcional)</Label>
+              <FormField
+                label="Encargado / dueño (opcional)"
+                hint="Quién responde por esta sucursal. Se elige entre los usuarios de la organización."
+                className="sm:col-span-2"
+              >
                 <Select
                   value={form.managerMemberId}
                   onValueChange={(v) => setForm((f) => ({ ...f, managerMemberId: v }))}
@@ -248,24 +243,45 @@ export default function BranchesPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Quién responde por esta sucursal. Se elige entre los usuarios de la organización.
-                </p>
-              </div>
+              </FormField>
             )}
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingBranch ? 'Guardar' : 'Crear'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </FormGrid>
+        </FormSection>
+
+        <FormSection icon={Phone} title="Contacto">
+          <PhoneField
+            id="branch-phone"
+            label="Teléfono (opcional)"
+            code={form.phoneCountryCode}
+            number={form.phone}
+            onChange={(code, number) =>
+              setForm((f) => ({ ...f, phoneCountryCode: code, phone: number }))
+            }
+            showError={Boolean(formError)}
+          />
+        </FormSection>
+
+        <FormSection icon={MapPin} title="Ubicación">
+          <FormGrid>
+            <FormField label="Dirección (opcional)" htmlFor="branch-address">
+              <Input
+                id="branch-address"
+                value={form.address}
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Av. Principal N°123"
+              />
+            </FormField>
+            <FormField label="Ciudad (opcional)" htmlFor="branch-city">
+              <Input
+                id="branch-city"
+                value={form.city}
+                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                placeholder="Santa Cruz de la Sierra"
+              />
+            </FormField>
+          </FormGrid>
+        </FormSection>
+      </FormDialog>
 
       {error && (
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">

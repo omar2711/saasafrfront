@@ -347,7 +347,7 @@ export default function CustomersPage() {
       )}
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo cliente</DialogTitle>
             <DialogDescription>El CI/NIT no puede repetirse entre clientes.</DialogDescription>
@@ -356,6 +356,7 @@ export default function CustomersPage() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleCreate}
+            onCancel={() => setIsCreateOpen(false)}
             submitLabel="Crear cliente"
             isSubmitting={isSubmitting}
             error={formError}
@@ -365,7 +366,7 @@ export default function CustomersPage() {
       </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar cliente</DialogTitle>
             <DialogDescription>Actualiza los datos de {selectedCustomer?.name}.</DialogDescription>
@@ -374,6 +375,7 @@ export default function CustomersPage() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleEdit}
+            onCancel={() => setIsEditOpen(false)}
             submitLabel="Guardar cambios"
             isSubmitting={isSubmitting}
             error={formError}

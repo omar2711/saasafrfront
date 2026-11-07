@@ -1,5 +1,10 @@
 'use client';
 
+import { PhoneField } from '@/components/phone-field';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { validatePhone } from '@/lib/utils/phone';
+import { Building2 as CompanyIcon, Phone as ContactIcon, MapPin as LocationIcon, StickyNote as NotesIcon, Loader2 as SpinnerIcon } from 'lucide-react';
+
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { Plus, Search, MoreHorizontal, Truck, Mail, Phone, MapPin, Edit, Trash2, Eye } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -104,6 +109,7 @@ function buildSupplierPayload(formData: ProviderFormData) {
 }
 
 interface ProviderFormProps {
+  onCancel?: () => void;
   formData: ProviderFormData;
   setFormData: Dispatch<SetStateAction<ProviderFormData>>;
   onSubmit: () => void;
@@ -112,163 +118,173 @@ interface ProviderFormProps {
   error: string | null;
 }
 
-function ProviderForm({ formData, setFormData, onSubmit, submitLabel, isSubmitting, error }: ProviderFormProps) {
+function ProviderForm({ formData, setFormData, onSubmit, submitLabel, isSubmitting, error, onCancel }: ProviderFormProps) {
   // Misma regla que el DTO del backend (@MinLength(2) tras el recorte).
   const isNameValid = formData.name.trim().length >= 2;
+  const phoneError = validatePhone(formData.phoneCountryCode, formData.phone);
+  const canSubmit = isNameValid && !phoneError && !isSubmitting;
 
   return (
-    <div className="grid gap-4 py-4">
-      {error && (
-        <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
-      )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Nombre del proveedor *</Label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Ej: Distribuidora ABC"
-            aria-invalid={!isNameValid}
-            maxLength={120}
-          />
-          {/* El boton deshabilitado no decia por que. */}
-          {!isNameValid && (
-            <p className="text-xs text-destructive">
-              {formData.name.length === 0
-                ? 'El nombre es obligatorio.'
-                : 'El nombre debe tener al menos 2 caracteres.'}
-            </p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="company">Empresa</Label>
-          <Input
-            id="company"
-            value={formData.company}
-            onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
-            placeholder="Razon social"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="contactName">Nombre de contacto</Label>
-          <Input
-            id="contactName"
-            value={formData.contactName}
-            onChange={(e) => setFormData(prev => ({ ...prev, contactName: e.target.value }))}
-            placeholder="Persona de contacto"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="taxId">NIT / RFC</Label>
-          <Input
-            id="taxId"
-            value={formData.taxId}
-            onChange={(e) => setFormData(prev => ({ ...prev, taxId: e.target.value.toUpperCase() }))}
-            placeholder="NIT del proveedor"
-            className="font-mono"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="phone">Telefono</Label>
-          <div className="flex gap-2">
-            <CountryCodeCombobox
-              value={formData.phoneCountryCode}
-              onChange={(value) => setFormData(prev => ({ ...prev, phoneCountryCode: value }))}
-            />
+    <form
+      className="space-y-6 py-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (canSubmit) onSubmit();
+      }}
+    >
+      <FormSection icon={CompanyIcon} title="Datos del proveedor">
+        <FormGrid>
+          <FormField
+            label="Nombre del proveedor"
+            htmlFor="name"
+            required
+            error={
+              !isNameValid
+                ? formData.name.length === 0
+                  ? 'El nombre es obligatorio.'
+                  : 'El nombre debe tener al menos 2 caracteres.'
+                : null
+            }
+          >
             <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Ej: Distribuidora ABC"
+              aria-invalid={!isNameValid}
+              maxLength={120}
+            />
+          </FormField>
+          <FormField label="Empresa" htmlFor="company">
+            <Input
+              id="company"
+              value={formData.company}
+              onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
+              placeholder="Razón social"
+            />
+          </FormField>
+          <FormField label="NIT / RFC" htmlFor="taxId">
+            <Input
+              id="taxId"
+              value={formData.taxId}
+              onChange={(e) => setFormData(prev => ({ ...prev, taxId: e.target.value.toUpperCase() }))}
+              placeholder="NIT del proveedor"
+              className="font-mono"
+            />
+          </FormField>
+        </FormGrid>
+      </FormSection>
+
+      <FormSection icon={ContactIcon} title="Contacto">
+        <FormGrid>
+          <FormField label="Nombre de contacto" htmlFor="contactName">
+            <Input
+              id="contactName"
+              value={formData.contactName}
+              onChange={(e) => setFormData(prev => ({ ...prev, contactName: e.target.value }))}
+              placeholder="Persona de contacto"
+            />
+          </FormField>
+          <FormField label="Correo electrónico" htmlFor="email">
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+              placeholder="contacto@proveedor.com"
+            />
+          </FormField>
+          <div className="sm:col-span-2">
+            <PhoneField
               id="phone"
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-              placeholder="70000000"
+              label="Teléfono"
+              code={formData.phoneCountryCode}
+              number={formData.phone}
+              onChange={(code, number) =>
+                setFormData(prev => ({ ...prev, phoneCountryCode: code, phone: number }))
+              }
+              showError={Boolean(error)}
             />
           </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">Correo electronico</Label>
-          <Input
-            id="email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-            placeholder="contacto@proveedor.com"
+        </FormGrid>
+      </FormSection>
+
+      <FormSection icon={LocationIcon} title="Ubicación">
+        <FormGrid>
+          <FormField label="Dirección" htmlFor="address" className="sm:col-span-2">
+            <Input
+              id="address"
+              value={formData.address}
+              onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+              placeholder="Calle, número, zona"
+            />
+          </FormField>
+          <FormField label="Departamento / Estado" htmlFor="stateRegion">
+            <Input
+              id="stateRegion"
+              value={formData.stateRegion}
+              onChange={(e) => setFormData(prev => ({ ...prev, stateRegion: e.target.value }))}
+              placeholder="Ej: Santa Cruz"
+            />
+          </FormField>
+          <FormField label="País / Región" htmlFor="location">
+            <Input
+              id="location"
+              value={formData.location}
+              onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+              placeholder="Ej: Bolivia"
+            />
+          </FormField>
+        </FormGrid>
+      </FormSection>
+
+      <FormSection icon={NotesIcon} title="Notas y estado">
+        <FormField label="Notas" htmlFor="notes">
+          <Textarea
+            id="notes"
+            value={formData.notes}
+            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+            placeholder="Notas adicionales sobre el proveedor..."
+            rows={3}
+          />
+        </FormField>
+        <div className="flex items-center justify-between rounded-lg border p-4">
+          <div className="space-y-0.5">
+            <Label htmlFor="status">Estado</Label>
+            <p className="text-sm text-muted-foreground">
+              {formData.isActive ? 'El proveedor está activo' : 'El proveedor está inactivo'}
+            </p>
+          </div>
+          <Switch
+            id="status"
+            checked={formData.isActive}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
           />
         </div>
-      </div>
+      </FormSection>
 
-      <div className="space-y-2">
-        <Label htmlFor="address">Direccion</Label>
-        <Input
-          id="address"
-          value={formData.address}
-          onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-          placeholder="Calle, numero, zona"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="stateRegion">Departamento / Estado</Label>
-          <Input
-            id="stateRegion"
-            value={formData.stateRegion}
-            onChange={(e) => setFormData(prev => ({ ...prev, stateRegion: e.target.value }))}
-            placeholder="Ej: Santa Cruz"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="location">Pais / Region</Label>
-          <Input
-            id="location"
-            value={formData.location}
-            onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-            placeholder="Ej: Bolivia"
-          />
+      <div className="space-y-3 border-t pt-4">
+        {error && (
+          <div
+            role="alert"
+            className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            {error}
+          </div>
+        )}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          {onCancel && (
+            <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+              Cancelar
+            </Button>
+          )}
+          <Button type="submit" disabled={!canSubmit} className="min-w-[120px]">
+            {isSubmitting && <SpinnerIcon className="mr-2 h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Guardando...' : submitLabel}
+          </Button>
         </div>
       </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="notes">Notas</Label>
-        <Textarea
-          id="notes"
-          value={formData.notes}
-          onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-          placeholder="Notas adicionales sobre el proveedor..."
-          rows={3}
-        />
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border p-4">
-        <div className="space-y-0.5">
-          <Label htmlFor="status">Estado</Label>
-          <p className="text-sm text-muted-foreground">
-            {formData.isActive ? 'El proveedor esta activo' : 'El proveedor esta inactivo'}
-          </p>
-        </div>
-        <Switch
-          id="status"
-          checked={formData.isActive}
-          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
-        />
-      </div>
-
-      <DialogFooter>
-        <Button
-          type="submit"
-          onClick={onSubmit}
-          disabled={!isNameValid || isSubmitting}
-        >
-          {isSubmitting ? 'Guardando...' : submitLabel}
-        </Button>
-      </DialogFooter>
-    </div>
+    </form>
   );
 }
 
@@ -596,7 +612,7 @@ export default function ProvidersPage() {
       )}
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Crear Nuevo Proveedor</DialogTitle>
             <DialogDescription>
@@ -607,6 +623,7 @@ export default function ProvidersPage() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleSubmitCreate}
+            onCancel={() => setIsCreateOpen(false)}
             submitLabel="Crear Proveedor"
             isSubmitting={isSubmitting}
             error={error}
@@ -615,7 +632,7 @@ export default function ProvidersPage() {
       </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[680px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Proveedor</DialogTitle>
             <DialogDescription>Modifica los datos del proveedor.</DialogDescription>
@@ -624,6 +641,7 @@ export default function ProvidersPage() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleSubmitEdit}
+            onCancel={() => setIsEditOpen(false)}
             submitLabel="Guardar Cambios"
             isSubmitting={isSubmitting}
             error={error}
