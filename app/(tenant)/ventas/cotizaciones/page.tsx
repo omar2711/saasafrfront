@@ -1,7 +1,8 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, MoreHorizontal, FileText, ShoppingCart } from 'lucide-react';
+import { Plus, Search, Filter, MoreHorizontal, FileText, FileDown, ShoppingCart } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,8 +41,9 @@ import {
 import { quotesApi, type QuoteDto } from '@/lib/api/quotes';
 import { QuotationForm, type QuotationFormData } from '@/components/quotation-form';
 import { QuotationPreview } from '@/components/quotation-preview';
-import { useOrganization } from '@/contexts/organization-context';
+import { useOrganization, useSystemSettings } from '@/contexts/organization-context';
 import { formatDate } from '@/lib/format';
+import { exportQuotePdf } from '@/lib/pdf/quote-pdf';
 
 const statusMap: Record<string, 'draft' | 'pending' | 'success' | 'active' | 'inactive' | 'warning'> = {
   pending: 'draft',
@@ -63,8 +65,22 @@ const statusLabels: Record<string, string> = {
   converted: 'Convertida',
 };
 
+function validityInfo(validUntil?: string | null) {
+  if (!validUntil) return null;
+  const end = new Date(validUntil);
+  if (Number.isNaN(end.getTime())) return null;
+  const days = Math.ceil((end.getTime() - Date.now()) / 86400000);
+  if (days < 0) return { text: 'Vencida', tone: 'text-destructive' };
+  if (days === 0) return { text: 'Vence hoy', tone: 'text-amber-600' };
+  return {
+    text: `Vence en ${days} ${days === 1 ? 'd\u00eda' : 'd\u00edas'}`,
+    tone: days <= 3 ? 'text-amber-600' : 'text-muted-foreground',
+  };
+}
+
 export default function QuotesPage() {
-  const { currentBranch } = useOrganization();
+  const { currentBranch, organization } = useOrganization();
+  const { taxRate } = useSystemSettings();
   const [quotes, setQuotes] = useState<QuoteDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -75,6 +91,25 @@ export default function QuotesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Datos de la tienda para el encabezado del presupuesto y del PDF.
+  const org = organization as unknown as {
+    name?: string | null;
+    taxId?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  } | null;
+
+  const handleDownloadPdf = async (quote: QuoteDto) => {
+    setError(null);
+    try {
+      // La lista no trae los productos de cada cotización: se pide la completa.
+      const full = await quotesApi.get(quote.id);
+      exportQuotePdf(full, { name: org?.name, taxId: org?.taxId, phone: org?.phone, address: org?.address });
+    } catch {
+      setError('No se pudo generar el PDF');
+    }
+  };
+
   useEffect(() => {
     quotesApi.list()
       .then(setQuotes)
@@ -83,7 +118,7 @@ export default function QuotesPage() {
   }, []);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   const filteredQuotes = quotes.filter(q => {
     const matchSearch =
@@ -101,24 +136,28 @@ export default function QuotesPage() {
     setIsSaving(true);
     setError(null);
     try {
-      const TAX_RATE = 0.13;
+      const TAX_RATE = taxRate / 100;
       const subtotal = formData.items.reduce((sum, item) => sum + item.total, 0);
       const discountAmount = subtotal * ((formData.discount ?? 0) / 100);
       const subtotalAfterDiscount = subtotal - discountAmount;
-      const tax = subtotalAfterDiscount * TAX_RATE;
+      const tax = formData.applyTax ? subtotalAfterDiscount * TAX_RATE : 0;
 
       const quoteNumber = `COT-${new Date().getFullYear()}-${String(quotes.length + 1).padStart(4, '0')}`;
       const created = await quotesApi.create({
         branchId: currentBranch.id,
+        customerId: formData.customerId,
         quoteNumber,
         status: 'sent',
-        validUntil: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+        validUntil: new Date(Date.now() + (formData.validityDays || 15) * 24 * 60 * 60 * 1000).toISOString(),
         taxTotal: tax,
         discountTotal: discountAmount,
         notes: formData.notes,
         clientName: formData.clientName,
         clientPhone: formData.clientPhone,
         clientEmail: formData.clientEmail,
+        clientCompany: formData.clientCompany || undefined,
+        clientNit: formData.clientNIT || undefined,
+        clientAddress: formData.clientAddress || undefined,
         items: formData.items.map(item => ({
           productId: item.productId,
           kitId: item.kitId,
@@ -190,8 +229,12 @@ export default function QuotesPage() {
           </DialogHeader>
           {previewQuote && (
             <div className="space-y-4">
-              <QuotationPreview quote={previewQuote} />
+              <QuotationPreview quote={previewQuote} companyName={org?.name ?? undefined} companyTax={org?.taxId ?? undefined} companyPhone={org?.phone ?? undefined} />
               <div className="flex gap-2">
+                <Button onClick={() => handleDownloadPdf(previewQuote)}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Descargar PDF
+                </Button>
                 <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Cerrar</Button>
               </div>
             </div>
@@ -265,9 +308,9 @@ export default function QuotesPage() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead>Total</TableHead>
-                <TableHead>Vigencia</TableHead>
+                <TableHead className="whitespace-nowrap">Vigencia</TableHead>
                 <TableHead>Estado</TableHead>
-                <TableHead>Fecha</TableHead>
+                <TableHead className="whitespace-nowrap">Fecha de creaci&oacute;n</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -287,14 +330,21 @@ export default function QuotesPage() {
                     <Badge variant="secondary">{quote.items?.length ?? 0} productos</Badge>
                   </TableCell>
                   <TableCell className="font-semibold">{formatCurrency(quote.total)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(quote.validUntil, '-')}
+                  <TableCell className="whitespace-nowrap">
+                    <div className="text-sm">{formatDate(quote.validUntil, '-')}</div>
+                    {(() => {
+                      const v = validityInfo(quote.validUntil);
+                      return v ? <div className={`text-xs ${v.tone}`}>{v.text}</div> : null;
+                    })()}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={statusMap[quote.status]} label={statusLabels[quote.status]} />
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(quote.createdAt)}
+                  <TableCell className="whitespace-nowrap">
+                    <div className="text-sm">{formatDate(quote.createdAt)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(quote.createdAt).toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -307,6 +357,10 @@ export default function QuotesPage() {
                         <DropdownMenuItem onClick={() => { setPreviewQuote(quote); setIsPreviewOpen(true); }}>
                           <FileText className="mr-2 h-4 w-4" />
                           Ver Presupuesto
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownloadPdf(quote)}>
+                          <FileDown className="mr-2 h-4 w-4" />
+                          Descargar PDF
                         </DropdownMenuItem>
                         {quote.status === 'sent' && (
                           <>

@@ -14,6 +14,7 @@ export interface User {
   name: string;
   avatar?: string;
   role: UserRole;
+  roleNames?: string[];
   organizationId?: string;
   branchIds?: string[];
   isActive: boolean;

@@ -3,6 +3,7 @@
 import { PhoneField } from '@/components/phone-field';
 import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 import { validatePhone } from '@/lib/utils/phone';
+import { LocationFields } from '@/components/location-fields';
 import { Building2 as CompanyIcon, Phone as ContactIcon, MapPin as LocationIcon, StickyNote as NotesIcon, Loader2 as SpinnerIcon } from 'lucide-react';
 
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
@@ -209,32 +210,15 @@ function ProviderForm({ formData, setFormData, onSubmit, submitLabel, isSubmitti
       </FormSection>
 
       <FormSection icon={LocationIcon} title="Ubicación">
-        <FormGrid>
-          <FormField label="Dirección" htmlFor="address" className="sm:col-span-2">
-            <Input
-              id="address"
-              value={formData.address}
-              onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-              placeholder="Calle, número, zona"
-            />
-          </FormField>
-          <FormField label="Departamento / Estado" htmlFor="stateRegion">
-            <Input
-              id="stateRegion"
-              value={formData.stateRegion}
-              onChange={(e) => setFormData(prev => ({ ...prev, stateRegion: e.target.value }))}
-              placeholder="Ej: Santa Cruz"
-            />
-          </FormField>
-          <FormField label="País / Región" htmlFor="location">
-            <Input
-              id="location"
-              value={formData.location}
-              onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-              placeholder="Ej: Bolivia"
-            />
-          </FormField>
-        </FormGrid>
+        <LocationFields
+          idPrefix="supplier"
+          country={formData.location}
+          city={formData.stateRegion}
+          address={formData.address}
+          onChange={({ country, city, address }) =>
+            setFormData((prev) => ({ ...prev, location: country, stateRegion: city, address }))
+          }
+        />
       </FormSection>
 
       <FormSection icon={NotesIcon} title="Notas y estado">
@@ -701,7 +685,7 @@ export default function ProvidersPage() {
                 )}
                 {selectedProvider.stateRegion && (
                   <div>
-                    <p className="text-muted-foreground">Departamento / Estado</p>
+                    <p className="text-muted-foreground">Ciudad</p>
                     <p className="font-medium">{selectedProvider.stateRegion}</p>
                   </div>
                 )}

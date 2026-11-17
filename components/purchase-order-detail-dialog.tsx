@@ -134,9 +134,11 @@ export function PurchaseOrderDetailDialog({
                     <span>Descuento:</span><span>-{formatCurrency(order.discountTotal)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm">
-                  <span>IVA:</span><span>{formatCurrency(order.taxTotal)}</span>
-                </div>
+                {order.taxTotal > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>IVA:</span><span>{formatCurrency(order.taxTotal)}</span>
+                  </div>
+                )}
                 <Separator />
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total:</span>

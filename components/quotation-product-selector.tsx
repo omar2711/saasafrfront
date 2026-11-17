@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useLiveApiEffect } from '@/hooks/use-live-api-effect';
-import { Search, Plus, X, AlertCircle } from 'lucide-react';
+import { Search, Plus, X, AlertCircle, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ export interface QuoteLineItem {
   discount: number;
   total: number;
   availableStock: number;
+  imageUrl?: string | null;
 }
 
 interface ProductSelectorProps {
@@ -46,6 +47,24 @@ interface BranchPricing {
   salePrice: number;
   min: number | null;
   max: number | null;
+}
+
+function ProductThumb({
+  src,
+  name,
+  size = 'h-12 w-12',
+}: {
+  src?: string | null;
+  name: string;
+  size?: string;
+}) {
+  return src ? (
+    <img src={src} alt={name} className={`${size} shrink-0 rounded-md border object-cover`} />
+  ) : (
+    <div className={`${size} flex shrink-0 items-center justify-center rounded-md border bg-muted text-muted-foreground`}>
+      <Package className="h-5 w-5" />
+    </div>
+  );
 }
 
 export function QuotationProductSelector({
@@ -151,6 +170,7 @@ export function QuotationProductSelector({
       discount: 0,
       total: getEffectivePrice(selectedProduct) * selectedQuantity,
       availableStock: selectedAvailability.currentStock,
+      imageUrl: selectedProduct.imageUrl ?? null,
     };
 
     onAddItem(newItem);
@@ -336,7 +356,8 @@ export function QuotationProductSelector({
                           : 'border-border hover:border-primary/50'
                       }`}
                     >
-                      <div className="flex items-start justify-between">
+                      <div className="flex items-start justify-between gap-3">
+                        <ProductThumb src={product.imageUrl} name={product.name} />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate">{product.name}</div>
                           <div className="text-xs text-muted-foreground font-mono">{product.sku}</div>
@@ -376,9 +397,12 @@ export function QuotationProductSelector({
           {selectedProduct && selectedAvailability && (
             <div className="space-y-3 pt-4 border-t">
               <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-medium">{selectedProduct.name}</div>
-                  <div className="text-sm text-muted-foreground">{selectedProduct.sku}</div>
+                <div className="flex items-center gap-3">
+                  <ProductThumb src={selectedProduct.imageUrl} name={selectedProduct.name} size="h-16 w-16" />
+                  <div>
+                    <div className="font-medium">{selectedProduct.name}</div>
+                    <div className="text-sm text-muted-foreground">{selectedProduct.sku}</div>
+                  </div>
                 </div>
                 <Badge variant={isOutOfStock ? 'destructive' : 'default'}>
                   {selectedAvailability.currentStock} disponibles
@@ -446,6 +470,7 @@ export function QuotationProductSelector({
                 return (
                   <div key={item.id} className="space-y-2 rounded-lg border p-3">
                     <div className="flex items-start justify-between gap-2">
+                      <ProductThumb src={item.imageUrl} name={item.name} size="h-10 w-10" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-sm">{item.name}</div>
                         <div className="text-xs text-muted-foreground">

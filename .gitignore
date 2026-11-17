@@ -19,3 +19,8 @@ node_modules
 *.bak*
 resultados.txt
 salida.txt
+
+# Environment files
+.env
+.env.*
+!.env.example

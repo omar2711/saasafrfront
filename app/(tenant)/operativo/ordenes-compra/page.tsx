@@ -1,11 +1,12 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { FormDialog } from '@/components/form-dialog';
 import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 import { ClipboardList as OrderIcon, Boxes as ItemsIcon, Calculator as SummaryIcon } from 'lucide-react';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, MoreHorizontal, Eye, Trash2, Upload, X, Package, FileDown } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Eye, Trash2, Upload, X, Package, FileDown, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,17 +47,115 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PurchaseOrderDetailDialog } from '@/components/purchase-order-detail-dialog';
-import { PurchaseOrdersHistoryTab } from '@/components/purchase-orders-history-tab';
 import { purchaseOrdersApi, type PurchaseOrderDto, type POStatus } from '@/lib/api/purchase-orders';
 import { suppliersApi, type SupplierDto } from '@/lib/api/suppliers';
 import { productsApi, type ProductDto } from '@/lib/api/products';
+import { categoriesApi, type CategoryDto } from '@/lib/api/categories';
+import { CategorySelect } from '@/components/category-select';
+import { UnitSelect } from '@/components/unit-select';
 import { PO_STATUSES, poStatusLabels, poStatusMap } from '@/lib/data/purchase-order-status';
 import { useOrganization } from '@/contexts/organization-context';
 import { formatDate } from '@/lib/format';
 import { exportPurchaseOrderPdf } from '@/lib/pdf/purchase-order-pdf';
 
+const NO_CATEGORY = '__none__';
+
+const normalize = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ');
+const tokensOf = (s: string) => normalize(s).split(/\s+/).filter(w => w.length >= 3);
+
+// Reglas de apoyo: palabra del producto -> unidad y categoria sugeridas.
+// `hints` busca una categoria existente cuyo nombre contenga ese texto; si no hay,
+// se sugiere crear `category`. Agrega o ajusta reglas segun tu rubro.
+const STOPWORDS = new Set(['para', 'con', 'sin', 'del', 'los', 'las', 'una', 'por', 'que']);
+const stem = (w: string) => w.replace(/(es|s)$/, '');
+
+interface KeywordRule {
+  words: string[];
+  unit: string;
+  category: string;
+  hints: string[];
+}
+
+const KEYWORD_RULES: KeywordRule[] = [
+  { words: ['zapato', 'zapatilla', 'bota', 'botin', 'sandalia', 'chinela', 'pantufla', 'tenis'], unit: 'par', category: 'Calzado', hints: ['calzad', 'zapat'] },
+  { words: ['media', 'calcetin', 'guante'], unit: 'par', category: 'Ropa y accesorios', hints: ['ropa', 'vestim', 'accesor'] },
+  { words: ['polera', 'camisa', 'pantalon', 'chamarra', 'vestido', 'falda', 'short', 'buzo', 'chompa', 'casaca', 'jean'], unit: 'unidad', category: 'Ropa', hints: ['ropa', 'vestim', 'textil'] },
+  { words: ['gomita', 'caramelo', 'chocolate', 'chicle', 'dulce', 'golosina', 'paleta', 'snack', 'chizito', 'confite'], unit: 'bolsa', category: 'Dulces y golosinas', hints: ['dulc', 'golos', 'confit', 'snack', 'abarrot', 'aliment'] },
+  { words: ['galleta', 'fideo', 'cereal', 'avena', 'panal'], unit: 'paquete', category: 'Abarrotes', hints: ['abarrot', 'aliment', 'galleta'] },
+  { words: ['gaseosa', 'refresco', 'agua', 'cerveza', 'vino', 'singani', 'energizante'], unit: 'botella', category: 'Bebidas', hints: ['bebid', 'licor'] },
+  { words: ['leche', 'yogur', 'queso', 'mantequilla'], unit: 'litro', category: 'Lácteos', hints: ['lact', 'aliment', 'abarrot'] },
+  { words: ['aceite', 'vinagre', 'jugo'], unit: 'litro', category: 'Abarrotes', hints: ['abarrot', 'aliment', 'bebid'] },
+  { words: ['arroz', 'azucar', 'harina', 'lenteja', 'frijol', 'maiz', 'trigo', 'quinua', 'chuno', 'sal'], unit: 'kg', category: 'Abarrotes', hints: ['abarrot', 'aliment'] },
+  { words: ['papa', 'cebolla', 'tomate', 'zanahoria', 'manzana', 'platano', 'naranja', 'limon', 'verdura', 'fruta'], unit: 'kg', category: 'Frutas y verduras', hints: ['fruta', 'verdur', 'abarrot', 'aliment'] },
+  { words: ['carne', 'pollo', 'pescado', 'chorizo', 'salchicha', 'jamon'], unit: 'kg', category: 'Carnes y embutidos', hints: ['carne', 'embut', 'aliment'] },
+  { words: ['huevo'], unit: 'docena', category: 'Huevos y lácteos', hints: ['huev', 'lact', 'aliment', 'abarrot'] },
+  { words: ['pan', 'torta', 'pastel', 'empanada'], unit: 'unidad', category: 'Panadería', hints: ['panader', 'pan', 'reposter'] },
+  { words: ['lamina', 'calamina', 'plancha', 'tablero', 'madera', 'ladrillo', 'teja'], unit: 'unidad', category: 'Ferretería y construcción', hints: ['ferret', 'construc', 'material'] },
+  { words: ['cemento', 'yeso', 'cal', 'arena', 'grava'], unit: 'bolsa', category: 'Ferretería y construcción', hints: ['ferret', 'construc', 'material'] },
+  { words: ['clavo', 'tornillo', 'perno', 'tuerca', 'remache'], unit: 'caja', category: 'Ferretería y construcción', hints: ['ferret', 'construc', 'material'] },
+  { words: ['pintura', 'barniz', 'esmalte', 'thinner'], unit: 'galón', category: 'Pinturas', hints: ['pintur', 'ferret'] },
+  { words: ['cable', 'alambre'], unit: 'metro', category: 'Electricidad', hints: ['electr', 'cable', 'accesor'] },
+  { words: ['mouse', 'teclado', 'cargador', 'audifono', 'parlante', 'celular', 'monitor', 'laptop', 'tablet', 'pendrive'], unit: 'unidad', category: 'Electrónicos', hints: ['electr', 'tecnolog', 'perif', 'accesor'] },
+  { words: ['cuaderno', 'lapiz', 'lapicero', 'boligrafo', 'marcador', 'folder', 'carpeta', 'tijera', 'regla'], unit: 'unidad', category: 'Papelería', hints: ['papel', 'escolar', 'oficina'] },
+  { words: ['resma', 'hoja', 'sobre'], unit: 'paquete', category: 'Papelería', hints: ['papel', 'escolar', 'oficina'] },
+  { words: ['lavandina', 'cloro', 'desinfectante', 'suavizante'], unit: 'litro', category: 'Limpieza', hints: ['limpie', 'aseo', 'hogar'] },
+  { words: ['detergente', 'escoba', 'trapeador', 'esponja', 'bolsa'], unit: 'unidad', category: 'Limpieza', hints: ['limpie', 'aseo', 'hogar'] },
+  { words: ['shampoo', 'jabon', 'crema', 'cepillo', 'desodorante', 'perfume', 'maquillaje', 'labial', 'tinte'], unit: 'unidad', category: 'Higiene y belleza', hints: ['higien', 'belleza', 'cuidado', 'cosmet'] },
+  { words: ['pastilla', 'jarabe', 'vitamina', 'analgesico', 'antibiotico'], unit: 'caja', category: 'Farmacia', hints: ['farmac', 'medic', 'salud'] },
+  { words: ['juguete', 'muneca', 'pelota', 'rompecabeza', 'peluche'], unit: 'unidad', category: 'Juguetes', hints: ['jugue', 'infantil'] },
+  { words: ['vaso', 'plato', 'taza', 'olla', 'cuchara', 'tenedor', 'cuchillo', 'sarten'], unit: 'unidad', category: 'Hogar y cocina', hints: ['hogar', 'cocina', 'menaj'] },
+  { words: ['tela', 'cinta', 'hilo', 'elastico'], unit: 'metro', category: 'Mercería', hints: ['merc', 'textil', 'tela'] },
+];
+
+interface ItemSuggestion {
+  categoryId?: string;
+  newCategoryName?: string;
+  unit?: string;
+}
+
+// 1) Producto del catalogo con mas palabras en comun (su categoria y unidad).
+// 2) Para lo que falte, las reglas de palabras clave de arriba.
+function suggestForName(
+  name: string,
+  products: ProductDto[],
+  cats: { id: string; name: string }[],
+  excludeId?: string,
+): ItemSuggestion | null {
+  const tokens = tokensOf(name).filter(t => !STOPWORDS.has(t));
+  if (tokens.length === 0) return null;
+  const stems = tokens.map(stem);
+
+  let best: ProductDto | null = null;
+  let bestScore = 0;
+  for (const p of products) {
+    if (p.id === excludeId) continue;
+    const ps = new Set(tokensOf(p.name).map(stem));
+    const score = stems.filter(t => ps.has(t)).length;
+    if (score > bestScore) { best = p; bestScore = score; }
+  }
+
+  const result: ItemSuggestion = {};
+  if (best) {
+    const b = best;
+    if (b.categoryId && cats.some(c => c.id === b.categoryId)) result.categoryId = b.categoryId;
+    if (b.unit) result.unit = b.unit;
+  }
+
+  if (!result.unit || !result.categoryId) {
+    const rule = KEYWORD_RULES.find(r => r.words.some(w => stems.includes(stem(w))));
+    if (rule) {
+      if (!result.unit) result.unit = rule.unit;
+      if (!result.categoryId) {
+        const found = cats.find(c => rule.hints.some(h => normalize(c.name).includes(h)));
+        if (found) result.categoryId = found.id;
+        else result.newCategoryName = rule.category;
+      }
+    }
+  }
+  return result.categoryId || result.newCategoryName || result.unit ? result : null;
+}
 interface OrderItemFormData {
   productId: string;
   productName: string;
@@ -67,6 +166,8 @@ interface OrderItemFormData {
   imagePreview: string | null;
   unit: string;
   isNewProduct: boolean;
+  expirationDate: string;
+  categoryId: string;
 }
 
 interface OrderFormData {
@@ -86,18 +187,25 @@ const emptyItemData: OrderItemFormData = {
   imagePreview: null,
   unit: '',
   isNewProduct: false,
+  expirationDate: '',
+  categoryId: NO_CATEGORY,
 };
 
-const categories = ['Electronicos', 'Accesorios', 'Cables', 'Software', 'Perifericos', 'Componentes', 'Otros'];
+// Fecha local de hoy (YYYY-MM-DD), minimo del campo de vencimiento.
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 
 export default function PurchaseOrdersPage() {
   const { currentBranch, branches } = useOrganization();
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [products, setProducts] = useState<ProductDto[]>([]);
+  const [categoryList, setCategoryList] = useState<{ id: string; name: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [applyTax, setApplyTax] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -123,10 +231,12 @@ export default function PurchaseOrdersPage() {
       purchaseOrdersApi.list(),
       suppliersApi.list(),
       productsApi.list(),
-    ]).then(([ords, supps, prods]) => {
+      categoriesApi.list().catch(() => [] as CategoryDto[]),
+    ]).then(([ords, supps, prods, cats]) => {
       setOrders(ords);
       setSuppliers(supps);
       setProducts(prods);
+      setCategoryList(cats.filter(c => c.status === 'active').map(c => ({ id: c.id, name: c.name })));
     }).catch(() => setError('Error al cargar datos'))
       .finally(() => setIsLoading(false));
   }, []);
@@ -139,7 +249,7 @@ export default function PurchaseOrdersPage() {
   }, [currentBranch?.id]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 2 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 2 }).format(value);
 
   // Devolvia el UUID crudo cuando el proveedor ya no estaba en la lista (borrado
   // o inactivo): en la tabla se veia un identificador en vez de un nombre.
@@ -165,11 +275,9 @@ export default function PurchaseOrdersPage() {
 
   const calculateSubtotal = () =>
     formData.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const calculateTax = () => (applyTax ? calculateSubtotal() * 0.13 : 0);
-  const calculateTotal = () => calculateSubtotal() + calculateTax();
+  const calculateTotal = () => calculateSubtotal();
 
   const handleCreate = () => {
-    setApplyTax(true);
     setFormData({
       supplierId: '',
       branchId: currentBranch?.id ?? '',
@@ -197,6 +305,33 @@ export default function PurchaseOrdersPage() {
     }));
   };
 
+  const categoryNameOf = (id: string) =>
+    id === NO_CATEGORY ? '' : (categoryList.find(c => c.id === id)?.name ?? '');
+
+  const applySuggestion = async (index: number, s: ItemSuggestion) => {
+    let categoryId = s.categoryId;
+    if (!categoryId && s.newCategoryName) {
+      const name = s.newCategoryName;
+      const existing = categoryList.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        categoryId = existing.id;
+      } else {
+        try {
+          const made = await categoriesApi.create({ name });
+          setCategoryList(prev => [...prev, { id: made.id, name: made.name }]);
+          categoryId = made.id;
+        } catch {
+          setError('No se pudo crear la categoría sugerida');
+        }
+      }
+    }
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.map((it, i) =>
+        i === index ? { ...it, categoryId: categoryId ?? it.categoryId, unit: s.unit ?? it.unit } : it,
+      ),
+    }));
+  };
   const handleProductSelect = (index: number, productId: string) => {
     if (productId === '__new__') {
       setFormData(prev => ({
@@ -208,6 +343,8 @@ export default function PurchaseOrdersPage() {
             productName: '',
             sku: '',
             category: '',
+            categoryId: NO_CATEGORY,
+            unit: 'unidad',
             isNewProduct: true,
           } : item
         ),
@@ -228,6 +365,7 @@ export default function PurchaseOrdersPage() {
             unitPrice: product.costPrice ?? 0,
             category: product.category ?? '',
             unit: product.unit ?? '',
+            categoryId: product.categoryId ?? NO_CATEGORY,
             isNewProduct: false,
           } : item
         ),
@@ -275,22 +413,24 @@ export default function PurchaseOrdersPage() {
         branchId: formData.branchId,
         supplierId: formData.supplierId,
         orderNumber,
-        taxTotal: calculateTax(),
         notes: formData.notes || undefined,
         items: formData.items.map(item =>
           item.isNewProduct
             ? {
                 productName: item.productName,
                 sku: item.sku,
-                category: item.category || undefined,
+                category: categoryNameOf(item.categoryId) || undefined,
                 unit: item.unit || undefined,
+                image: item.imagePreview || undefined,
                 quantity: item.quantity,
                 unitCost: item.unitPrice,
+                expirationDate: item.expirationDate || undefined,
               }
             : {
                 productId: item.productId,
                 quantity: item.quantity,
                 unitCost: item.unitPrice,
+                expirationDate: item.expirationDate || undefined,
               }
         ),
       };
@@ -384,13 +524,9 @@ export default function PurchaseOrdersPage() {
 
       {error && <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
 
-      <Tabs defaultValue="ordenes" className="w-full">
-        <TabsList>
-          <TabsTrigger value="ordenes">Ordenes</TabsTrigger>
-          <TabsTrigger value="historial">Historial</TabsTrigger>
-        </TabsList>
+      <div className="w-full">
 
-        <TabsContent value="ordenes" className="space-y-6">
+        <div className="space-y-6">
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -422,6 +558,7 @@ export default function PurchaseOrdersPage() {
                 <TableHead>No. Orden</TableHead>
                 <TableHead>Proveedor</TableHead>
                 <TableHead>Sucursal</TableHead>
+                <TableHead>Producto</TableHead>
                 <TableHead>Items</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Estado</TableHead>
@@ -438,7 +575,30 @@ export default function PurchaseOrdersPage() {
                     {order.branchName ?? getBranchName(order.branchId)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{order.itemCount ?? 0} productos</Badge>
+                    <div className="flex items-center gap-2">
+                      {order.firstProductImage ? (
+                        <img
+                          src={order.firstProductImage}
+                          alt=""
+                          className="h-8 w-8 shrink-0 rounded-md border object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
+                          {(order.firstProductName ?? '?').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex flex-col">
+                        <span className="font-medium">{order.firstProductName ?? 'Sin producto'}</span>
+                        {(order.itemCount ?? 0) > 1 && (
+                          <span className="text-xs text-muted-foreground">+{(order.itemCount ?? 0) - 1} más</span>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">
+                      {order.itemCount ?? 0} {(order.itemCount ?? 0) === 1 ? 'producto' : 'productos'}
+                    </Badge>
                   </TableCell>
                   <TableCell className="font-semibold">{formatCurrency(order.totalCost)}</TableCell>
                   <TableCell>
@@ -526,12 +686,9 @@ export default function PurchaseOrdersPage() {
           )}
         </div>
       )}
-        </TabsContent>
+        </div>
 
-        <TabsContent value="historial">
-          <PurchaseOrdersHistoryTab />
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Create Dialog */}
       <FormDialog
@@ -659,40 +816,74 @@ export default function PurchaseOrdersPage() {
                       </p>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-                      <div className="space-y-2">
-                        <Label>Unidad</Label>
-                        <Input
+                    {(() => {
+                      const suggestion =
+                        item.productName.trim().length >= 3
+                          ? suggestForName(item.productName, products, categoryList, item.productId || undefined)
+                          : null;
+                      if (!suggestion) return null;
+                      const currentCat = categoryNameOf(item.categoryId).toLowerCase();
+                      const sugCat = suggestion.categoryId
+                        ? categoryNameOf(suggestion.categoryId)
+                        : (suggestion.newCategoryName ?? '');
+                      const catDiffers = !!sugCat && sugCat.toLowerCase() !== currentCat;
+                      const unitDiffers = !!suggestion.unit && suggestion.unit !== item.unit;
+                      if (!catDiffers && !unitDiffers) return null;
+                      return (
+                        <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs">
+                          <Sparkles className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-muted-foreground">
+                            Sugerencia:{' '}
+                            {catDiffers && (
+                              <>
+                                categoría <strong className="text-foreground">{sugCat}</strong>
+                                {!suggestion.categoryId && ' (nueva)'}
+                              </>
+                            )}
+                            {catDiffers && unitDiffers && ' · '}
+                            {unitDiffers && <>unidad <strong className="text-foreground">{suggestion.unit}</strong></>}
+                          </span>
+                          <button
+                            type="button"
+                            className="font-medium text-primary underline-offset-2 hover:underline"
+                            onClick={() => void applySuggestion(index, suggestion)}
+                          >
+                            Aplicar
+                          </button>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <FormField label="Unidad de medida">
+                        <UnitSelect
                           value={item.unit}
-                          onChange={(e) => handleItemChange(index, 'unit', e.target.value)}
-                          placeholder="pza, kg, caja"
-                          disabled={!item.isNewProduct && !!item.productId}
+                          onChange={(v) => handleItemChange(index, 'unit', v)}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Identificador</Label>
-                        <Input
-                          value={item.sku}
-                          onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
-                          placeholder="SKU-001"
-                          className="font-mono"
+                      </FormField>
+                      <FormField label="Categoría">
+                        <CategorySelect
+                          value={item.categoryId}
+                          onChange={(v) => handleItemChange(index, 'categoryId', v)}
+                          categories={categoryList}
+                          noneValue={NO_CATEGORY}
+                          onCreated={(c) => setCategoryList(prev => (prev.some(x => x.id === c.id) ? prev : [...prev, c]))}
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Categoría</Label>
-                        <Select value={item.category} onValueChange={(v) => handleItemChange(index, 'category', v)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Categoría" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map(cat => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Precio de compra *</Label>
+                      </FormField>
+                      {item.isNewProduct && (
+                        <FormField label="Identificador" required>
+                          <Input
+                            value={item.sku}
+                            onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
+                            placeholder="SKU-001"
+                            className="font-mono"
+                          />
+                        </FormField>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <FormField label="Precio de compra" required>
                         <Input
                           type="number"
                           min="0"
@@ -701,20 +892,27 @@ export default function PurchaseOrdersPage() {
                           onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                           placeholder="0.00"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Cantidad *</Label>
+                      </FormField>
+                      <FormField label="Cantidad" required>
                         <Input
                           type="number"
                           min="1"
                           value={item.quantity}
                           onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)}
                         />
-                      </div>
+                      </FormField>
+                      <FormField label="Fecha de vencimiento">
+                        <Input
+                          type="date"
+                          min={localToday()}
+                          value={item.expirationDate}
+                          onChange={(e) => handleItemChange(index, 'expirationDate', e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">Opcional. Déjala vacía si no vence.</p>
+                      </FormField>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label>Imagen del producto (opcional)</Label>
+                    <FormField label="Imagen del producto (opcional)">
                       <div className="flex items-start gap-4">
                         {item.imagePreview ? (
                           <div className="relative">
@@ -744,7 +942,7 @@ export default function PurchaseOrdersPage() {
                           </label>
                         )}
                       </div>
-                    </div>
+                    </FormField>
 
                     <div className="flex justify-end border-t pt-2">
                       <div className="text-sm">
@@ -768,13 +966,6 @@ export default function PurchaseOrdersPage() {
             <div className="flex justify-between text-sm">
               <span>Subtotal:</span>
               <span>{formatCurrency(calculateSubtotal())}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="h-4 w-4 accent-primary" />
-                <span>IVA (13%):</span>
-              </label>
-              <span>{formatCurrency(calculateTax())}</span>
             </div>
             <Separator />
             <div className="flex justify-between text-lg font-bold">

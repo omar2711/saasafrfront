@@ -5,7 +5,7 @@ export interface UserDto {
   email: string;
   fullName: string;
   phone: string | null;
-  status: 'active' | 'inactive' | 'suspended';
+  status: 'active' | 'disabled' | 'inactive' | 'suspended';
   createdAt: string;
   updatedAt: string;
 }
@@ -65,8 +65,11 @@ export const usersApi = {
   update: (id: string, payload: UpdateUserPayload): Promise<UserDto> =>
     apiRequest<UserDto>(`/iam/users/${id}`, { method: 'PATCH', body: payload }),
 
-  setStatus: (id: string, status: 'active' | 'inactive'): Promise<UserDto> =>
+  setStatus: (id: string, status: 'active' | 'disabled'): Promise<UserDto> =>
     apiRequest<UserDto>(`/iam/users/${id}/status`, { method: 'PATCH', body: { status } }),
+
+  remove: (id: string): Promise<void> =>
+    apiRequest<void>(`/iam/users/${id}`, { method: 'DELETE' }),
 };
 
 export const membershipsApi = {
@@ -106,3 +109,4 @@ export const rolesApi = {
 export const permissionsApi = {
   list: (): Promise<PermissionDto[]> => apiRequest<PermissionDto[]>('/iam/permissions'),
 };
+

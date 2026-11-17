@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, PackageCheck } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -49,7 +50,7 @@ export default function PendingDeliverySalesPage() {
   }, [loadData]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   const getBranchName = (id: string) => branches.find((b) => b.id === id)?.name ?? '—';
 

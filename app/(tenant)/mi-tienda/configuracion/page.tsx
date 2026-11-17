@@ -9,7 +9,7 @@ import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Building2, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
+import { Building2, Lock, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -104,6 +104,8 @@ function ConfiguracionContent() {
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [profileLocked, setProfileLocked] = useState(false);
+  const canEditOrg = canWriteSettings && !profileLocked;
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   // Fuerza el recálculo del estado en vivo mientras la pantalla está abierta.
   const [, setTick] = useState(0);
@@ -138,6 +140,7 @@ function ConfiguracionContent() {
         email: org.email ?? '',
         advanceSaleTerms: org.advanceSaleTerms ?? '',
       });
+      setProfileLocked(Boolean((org as unknown as { profileLocked?: boolean }).profileLocked));
       setSchedule(workSchedule);
       setRoles(roleList);
     } catch (e: unknown) {
@@ -170,7 +173,8 @@ function ConfiguracionContent() {
         // legítima y el backend distingue "ausente" de "vacío".
         advanceSaleTerms: orgForm.advanceSaleTerms,
       });
-      setSuccess('Datos de la empresa guardados. Recarga para ver el cambio de zona horaria en todas las pantallas.');
+      setProfileLocked(true);
+      setSuccess('Datos de la empresa guardados y bloqueados. Recarga para ver el cambio de zona horaria en todas las pantallas.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'No se pudieron guardar los datos');
     } finally {
@@ -270,6 +274,12 @@ function ConfiguracionContent() {
 <div className="space-y-6">
           <Card>
             <CardContent className="space-y-6 pt-6">
+              <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                <Lock className="h-4 w-4 shrink-0" />
+                {profileLocked
+                  ? 'Los datos de la empresa ya fueron registrados y no se pueden modificar.'
+                  : 'Completa estos datos con cuidado: al guardar, ya no se podrán modificar.'}
+              </div>
               <FormSection icon={Building2} title="Datos generales">
                 <FormGrid>
                   <FormField label="Nombre" htmlFor="org-name" required>
@@ -277,7 +287,7 @@ function ConfiguracionContent() {
                       id="org-name"
                       value={orgForm.name}
                       onChange={(e) => setOrgForm((p) => ({ ...p, name: e.target.value }))}
-                      disabled={!canWriteSettings}
+                      disabled={!canEditOrg}
                     />
                   </FormField>
                   <FormField label="NIT" htmlFor="org-taxid">
@@ -288,7 +298,7 @@ function ConfiguracionContent() {
                       onChange={(e) =>
                         setOrgForm((p) => ({ ...p, taxId: e.target.value.toUpperCase() }))
                       }
-                      disabled={!canWriteSettings}
+                      disabled={!canEditOrg}
                     />
                   </FormField>
                 </FormGrid>
@@ -304,7 +314,7 @@ function ConfiguracionContent() {
                     onChange={(code, number) =>
                       setOrgForm((p) => ({ ...p, phoneCountryCode: code, phone: number }))
                     }
-                    disabled={!canWriteSettings}
+                    disabled={!canEditOrg}
                   />
                   <FormField label="Correo" htmlFor="org-email">
                     <Input
@@ -312,7 +322,7 @@ function ConfiguracionContent() {
                       type="email"
                       value={orgForm.email}
                       onChange={(e) => setOrgForm((p) => ({ ...p, email: e.target.value }))}
-                      disabled={!canWriteSettings}
+                      disabled={!canEditOrg}
                     />
                   </FormField>
                 </FormGrid>
@@ -324,7 +334,7 @@ function ConfiguracionContent() {
                     id="org-address"
                     value={orgForm.address}
                     onChange={(e) => setOrgForm((p) => ({ ...p, address: e.target.value }))}
-                    disabled={!canWriteSettings}
+                    disabled={!canEditOrg}
                   />
                 </FormField>
               </FormSection>
@@ -338,7 +348,7 @@ function ConfiguracionContent() {
                   <Select
                     value={orgForm.timezone}
                     onValueChange={(value) => setOrgForm((p) => ({ ...p, timezone: value }))}
-                    disabled={!canWriteSettings}
+                    disabled={!canEditOrg}
                   >
                     <SelectTrigger id="org-timezone" className="max-w-sm">
                       <SelectValue />
@@ -355,7 +365,8 @@ function ConfiguracionContent() {
               </FormSection>
 
 
-              <div className="flex justify-end border-t pt-4">
+              {!profileLocked && (
+<div className="flex justify-end border-t pt-4">
                 <Button
                   onClick={handleSaveOrg}
                   disabled={!canWriteSettings || isSavingOrg}
@@ -369,6 +380,7 @@ function ConfiguracionContent() {
                   Guardar cambios
                 </Button>
               </div>
+)}
             </CardContent>
           </Card>
         </div>

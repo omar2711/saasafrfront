@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { FormDialog } from '@/components/form-dialog';
 import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 import { TrendingUp as IncomeIcon, TrendingDown as ExpenseIcon } from 'lucide-react';
@@ -84,7 +85,7 @@ export default function PettyCashPage() {
   const [deleting, setDeleting] = useState(false);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   async function loadData() {
     try {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { formatBs } from '@/lib/money';
 import { Plus, Search, Filter, MoreHorizontal, Package, Edit, Trash2, Eye, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { PageHeader } from "@/components/page-header"
 import { ProductFormDialog } from "@/components/product-form-dialog"
+import { useSuccessNotice } from "@/components/success-notice"
 import { ProductDetailsDialog } from "@/components/product-details-dialog"
 import { ProductStockAdjustDialog, type StockAdjustPayload } from "@/components/product-stock-adjust-dialog"
 import { productsApi, type ProductDto } from "@/lib/api/products"
@@ -40,6 +42,7 @@ import { useOrganization } from "@/contexts/organization-context"
 
 export default function ProductosPage() {
   const { currentBranch } = useOrganization()
+  const { showNotice, noticeElement } = useSuccessNotice()
   const [products, setProducts] = useState<ProductDto[]>([])
   const [stockMap, setStockMap] = useState<Record<string, number>>({})
   const [minStockMap, setMinStockMap] = useState<Record<string, number>>({})
@@ -103,6 +106,8 @@ export default function ProductosPage() {
         category: formData.category,
         description: formData.description,
         salePrice: formData.salePrice,
+        categoryId: formData.categoryId,
+        expirationDate: formData.expirationDate,
         costPrice: formData.costPrice,
         minSalePrice: formData.minSalePrice,
         maxSalePrice: formData.maxSalePrice,
@@ -112,6 +117,7 @@ export default function ProductosPage() {
         branchId: currentBranch?.id,
       })
       setProducts(prev => [...prev, created])
+      showNotice({ title: '¡Producto creado!', description: `El producto "${created.name}" se agregó al catálogo.` })
       if (currentBranch) {
         setMinStockMap(prev => ({ ...prev, [created.id]: formData.minStock ?? 0 }))
       }
@@ -130,15 +136,19 @@ export default function ProductosPage() {
         category: formData.category,
         description: formData.description,
         salePrice: formData.salePrice,
+        categoryId: formData.categoryId,
+        expirationDate: formData.expirationDate,
         costPrice: formData.costPrice,
         minSalePrice: formData.minSalePrice,
         maxSalePrice: formData.maxSalePrice,
         unit: formData.unit,
         image: formData.image,
         minStock: formData.minStock,
+        status: formData.status,
         branchId: currentBranch?.id,
       })
       setProducts(prev => prev.map(p => p.id === editingProduct.id ? updated : p))
+      showNotice({ title: '¡Producto actualizado!', description: `Los cambios en "${updated.name}" se guardaron.` })
       if (currentBranch) {
         setMinStockMap(prev => ({ ...prev, [editingProduct.id]: formData.minStock ?? 0 }))
       }
@@ -153,8 +163,10 @@ export default function ProductosPage() {
     if (!deletingProduct) return
     setErrorMessage('')
     try {
+      const deletedName = deletingProduct.name
       await productsApi.delete(deletingProduct.id)
       setProducts(prev => prev.filter(p => p.id !== deletingProduct.id))
+      showNotice({ title: '¡Producto eliminado!', description: `El producto "${deletedName}" ya no existe.` })
       setDeletingProduct(null)
     } catch (e: unknown) {
       setErrorMessage(e instanceof Error ? e.message : 'Error al eliminar producto')
@@ -220,6 +232,7 @@ export default function ProductosPage() {
         description="Gestiona el catálogo de productos de tu negocio"
       />
 
+      {noticeElement}
       <ProductFormDialog
         isOpen={isFormOpen}
         editingProduct={editingProduct}
@@ -371,10 +384,10 @@ export default function ProductosPage() {
                     <TableCell className="font-mono text-sm">{product.sku}</TableCell>
                     <TableCell>{product.category ?? '-'}</TableCell>
                     <TableCell className="text-right">
-                      Bs {(product.costPrice ?? 0).toLocaleString("es-BO")}
+                      {formatBs(product.costPrice ?? 0)}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      Bs {product.salePrice.toLocaleString("es-BO")}
+                      {formatBs(product.salePrice)}
                     </TableCell>
                     <TableCell className="text-right">
                       {stock} {product.unit ?? ''}

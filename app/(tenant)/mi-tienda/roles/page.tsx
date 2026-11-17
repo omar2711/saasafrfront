@@ -61,13 +61,18 @@ const GROUP_META: Record<string, { label: string; feature?: string }> = {
   support: { label: 'Soporte técnico' },
 };
 
+// Última respuesta conocida (por organización): al volver a la pantalla se pinta
+// al instante y se refresca en segundo plano.
+let rolesCache: { orgId: string; roles: RoleDto[]; perms: PermissionDto[] } | null = null;
+
 export default function RolesPage() {
-  const { hasPlanFeature, hasPermission } = useOrganization();
+  const { hasPlanFeature, hasPermission, organization } = useOrganization();
+  const cached = rolesCache && rolesCache.orgId === organization?.id ? rolesCache : null;
   const canManage = hasPermission('roles.manage');
 
-  const [roles, setRoles] = useState<RoleDto[]>([]);
-  const [permissions, setPermissions] = useState<PermissionDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [roles, setRoles] = useState<RoleDto[]>(cached?.roles ?? []);
+  const [permissions, setPermissions] = useState<PermissionDto[]>(cached?.perms ?? []);
+  const [isLoading, setIsLoading] = useState(!cached);
   const [error, setError] = useState('');
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -90,18 +95,18 @@ export default function RolesPage() {
   }, [notice]);
 
   const loadData = useCallback(async () => {
-    setIsLoading(true);
     setError('');
     try {
       const [r, p] = await Promise.all([rolesApi.list(), permissionsApi.list()]);
       setRoles(r);
       setPermissions(p);
+      if (organization) rolesCache = { orgId: organization.id, roles: r, perms: p };
     } catch {
       setError('No se pudieron cargar los roles');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [organization]);
 
   useEffect(() => {
     loadData();

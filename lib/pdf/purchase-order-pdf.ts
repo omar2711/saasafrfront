@@ -53,7 +53,7 @@ export function exportPurchaseOrderPdf(order: PurchaseOrderDto, supplierName?: s
   const right = 196;
   doc.setFontSize(10);
   doc.text(`Subtotal: ${money(order.subtotal)}`, right, finalY + 10, { align: 'right' });
-  doc.text(`IVA: ${money(order.taxTotal)}`, right, finalY + 16, { align: 'right' });
+  if (order.taxTotal > 0) doc.text(`IVA: ${money(order.taxTotal)}`, right, finalY + 16, { align: 'right' });
   doc.setFontSize(12);
   doc.text(`Total: ${money(order.totalCost)}`, right, finalY + 24, { align: 'right' });
 

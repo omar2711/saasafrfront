@@ -282,11 +282,26 @@ export default function UsersPage() {
   };
 
   const handleToggleStatus = async (user: UserDto) => {
+    const nextStatus = user.status === 'active' ? 'disabled' : 'active';
+
     try {
-      await usersApi.setStatus(user.id, user.status === 'active' ? 'inactive' : 'active');
+      await usersApi.setStatus(user.id, nextStatus);
       await loadData();
-    } catch {
-      // ignore — could show toast
+
+      setNotice({
+        title: nextStatus === 'active'
+          ? '¡Usuario activado!'
+          : '¡Usuario desactivado!',
+        description: nextStatus === 'active'
+          ? `${user.fullName} ya puede iniciar sesión.`
+          : `${user.fullName} ya no tiene acceso.`,
+      });
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo cambiar el estado del usuario.',
+      );
     }
   };
 
@@ -591,3 +606,5 @@ export default function UsersPage() {
     </div>
   );
 }
+
+

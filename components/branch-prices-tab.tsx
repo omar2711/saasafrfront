@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Search, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -133,7 +134,7 @@ export function BranchPricesTab() {
   }, [loadData]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   const handleSave = async (row: ProductRow, branchId: string) => {
     const key = `${row.productId}:${branchId}`;

@@ -31,8 +31,11 @@ import { formatDate } from '@/lib/format';
 import { PhoneField } from '@/components/phone-field';
 import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
 import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
+import { LocationFields } from '@/components/location-fields';
+import { COUNTRY_NAMES, citiesOf } from '@/lib/data/locations';
 
 interface BranchFormState {
+  country: string;
   phoneCountryCode: string;
   name: string;
   address: string;
@@ -50,7 +53,15 @@ interface ManagerOption {
 
 const NO_MANAGER = '__none__';
 
+/** La base guarda solo la ciudad: el país se deduce de la lista. */
+function countryOfCity(city: string | null | undefined): string {
+  if (!city) return '';
+  const found = COUNTRY_NAMES.find((c) => citiesOf(c).includes(city));
+  return found ?? 'Bolivia';
+}
+
 const EMPTY_FORM: BranchFormState = {
+  country: '',
   phoneCountryCode: DEFAULT_DIAL_CODE,
   name: '',
   address: '',
@@ -129,6 +140,7 @@ export default function BranchesPage() {
       name: branch.name,
       address: branch.address ?? '',
       city: branch.city ?? '',
+      country: countryOfCity(branch.city),
       ...splitPhone(branch.phone),
       managerMemberId: branch.managerMemberId ?? NO_MANAGER,
     });
@@ -255,24 +267,15 @@ export default function BranchesPage() {
         </FormSection>
 
         <FormSection icon={MapPin} title="Ubicación">
-          <FormGrid>
-            <FormField label="Dirección (opcional)" htmlFor="branch-address">
-              <Input
-                id="branch-address"
-                value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="Av. Principal N°123"
-              />
-            </FormField>
-            <FormField label="Ciudad (opcional)" htmlFor="branch-city">
-              <Input
-                id="branch-city"
-                value={form.city}
-                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                placeholder="Santa Cruz de la Sierra"
-              />
-            </FormField>
-          </FormGrid>
+          <LocationFields
+            idPrefix="branch"
+            country={form.country}
+            city={form.city}
+            address={form.address}
+            onChange={({ country, city, address }) =>
+              setForm((f) => ({ ...f, country, city, address }))
+            }
+          />
         </FormSection>
       </FormDialog>
 

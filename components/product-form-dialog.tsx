@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Package, DollarSign, Boxes, ImageIcon, Upload, X } from 'lucide-react';
+import { Package, DollarSign, Boxes, ImageIcon, ToggleRight, Upload, X, TrendingUp } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -11,9 +11,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { FormDialog } from '@/components/form-dialog';
 import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 
+import { CategorySelect } from '@/components/category-select';
+import { UnitSelect } from '@/components/unit-select';
 interface CategoryOption {
   id: string;
   name: string;
@@ -23,6 +26,8 @@ interface ProductFormDialogProps {
   isOpen: boolean;
   editingProduct?: any;
   categories?: CategoryOption[];
+  /** Stock actual del producto en la sucursal (solo al editar). */
+  currentStock?: number;
   onSave: (data: {
     name?: string;
     sku?: string;
@@ -34,25 +39,45 @@ interface ProductFormDialogProps {
     maxSalePrice?: number | null;
     minStock: number;
     initialStock?: number;
+    expirationDate?: string | null;
     unit?: string;
     image?: string;
-  }) => void;
+    /** Solo al editar un producto activo o inactivo. */
+    status?: 'active' | 'inactive';
+  }) => void | Promise<void>;
   onCancel: () => void;
 }
 
 const NO_CATEGORY = '__none__';
 
-const UNITS = [
-  'unidad',
-  'kg',
-  'litro',
-  'metro',
-  'paquete',
-  'caja',
-  'docena',
-];
 
-export function ProductFormDialog({ isOpen, editingProduct, categories = [], onSave, onCancel }: ProductFormDialogProps) {
+// Reduce la foto a un maximo de 800 px por lado y la pasa a JPEG: el backend rechaza
+// cuerpos de mas de 1 MB y una foto de celular en base64 pesa varios MB.
+const compressImage = (file: File, maxSide = 800, quality = 0.8): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onerror = () => reject(new Error('La imagen no es válida'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('No se pudo procesar la imagen'));
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+
+export function ProductFormDialog({ isOpen, editingProduct, categories = [], currentStock, onSave, onCancel }: ProductFormDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(editingProduct?.name || '');
@@ -61,14 +86,23 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
   const [description, setDescription] = useState(editingProduct?.description || '');
   const [costPrice, setCostPrice] = useState(editingProduct?.costPrice || '');
   const [salePrice, setSalePrice] = useState(editingProduct?.salePrice || '');
+  const [targetMargin, setTargetMargin] = useState('30');
   // Vacío = sin límite. No se normaliza a 0: 0 sería "regalar el producto".
   const [minSalePrice, setMinSalePrice] = useState(editingProduct?.minSalePrice ?? '');
   const [maxSalePrice, setMaxSalePrice] = useState(editingProduct?.maxSalePrice ?? '');
   const [minStock, setMinStock] = useState(editingProduct?.minStock || '5');
   const [unit, setUnit] = useState(editingProduct?.unit || 'unidad');
   const [initialStock, setInitialStock] = useState('');
-  const [imagePreview, setImagePreview] = useState<string | null>(editingProduct?.image || null);
+  const [expirationDate, setExpirationDate] = useState<string>(editingProduct?.expirationDate ?? '');
+  const [imagePreview, setImagePreview] = useState<string | null>(editingProduct?.imageUrl || null);
+  // Estado activo/inactivo: solo se cambia al editar, y no aplica a productos
+  // pendientes de precio (pending_pricing).
+  const [isActive, setIsActive] = useState<boolean>(editingProduct?.status !== 'inactive');
+  const canEditStatus =
+    Boolean(editingProduct) &&
+    (editingProduct?.status === 'active' || editingProduct?.status === 'inactive');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,8 +116,10 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     setMaxSalePrice(editingProduct?.maxSalePrice ?? '');
     setMinStock(editingProduct?.minStock || '5');
     setUnit(editingProduct?.unit || 'unidad');
+    setExpirationDate(editingProduct?.expirationDate ?? '');
     setInitialStock('');
-    setImagePreview(editingProduct?.image || null);
+    setImagePreview(editingProduct?.imageUrl || null);
+    setIsActive(editingProduct?.status !== 'inactive');
     setErrors({});
   }, [isOpen, editingProduct]);
 
@@ -128,17 +164,24 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setErrors((prev) => ({ ...prev, image: 'La imagen no puede pesar m\u00e1s de 2 MB.' }));
+      e.target.value = '';
+      return;
+    }
+    try {
+      setImagePreview(await compressImage(file));
+      setErrors((prev) => {
+        const { image: _ignored, ...rest } = prev;
+        return rest;
+      });
+    } catch {
+      setErrors((prev) => ({ ...prev, image: 'No se pudo cargar la imagen. Prueba con otra.' }));
     }
   };
-
   const handleRemoveImage = () => {
     setImagePreview(null);
     if (fileInputRef.current) {
@@ -146,8 +189,9 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
     }
   };
 
-  const handleSubmit = (e?: { preventDefault?: () => void }) => {
+  const handleSubmit = async (e?: { preventDefault?: () => void }) => {
     e?.preventDefault?.();
+    if (isSubmitting) return;
 
     if (validateForm()) {
       const data: any = {
@@ -161,34 +205,47 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
         minSalePrice: minSalePrice === '' ? null : parseFloat(String(minSalePrice)),
         maxSalePrice: maxSalePrice === '' ? null : parseFloat(String(maxSalePrice)),
         unit,
-        image: imagePreview || undefined,
+        image: imagePreview && imagePreview !== editingProduct?.imageUrl ? imagePreview : undefined,
+        expirationDate: expirationDate === '' ? null : expirationDate,
         initialStock: !editingProduct && initialStock !== '' ? parseFloat(initialStock) : undefined,
+        status: canEditStatus
+          ? (isActive ? 'active' : 'inactive')
+          : editingProduct?.status === 'pending_pricing'
+            ? 'active'
+            : undefined,
       };
 
-      onSave(data);
-      resetForm();
+      setIsSubmitting(true);
+      try {
+        await onSave(data);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
-  };
-
-  const resetForm = () => {
-    setName('');
-    setSku('');
-    setCategoryId(NO_CATEGORY);
-    setDescription('');
-    setCostPrice('');
-    setSalePrice('');
-    setMinSalePrice('');
-    setMaxSalePrice('');
-    setMinStock('5');
-    setUnit('unidad');
-    setInitialStock('');
-    setImagePreview(null);
-    setErrors({});
   };
 
   const margin = salePrice && costPrice
     ? (((parseFloat(salePrice) - parseFloat(costPrice)) / parseFloat(salePrice)) * 100).toFixed(1)
     : 0;
+
+  // Precio sugerido: costo / (1 - margen objetivo), redondeado hacia arriba a Bs 0.50
+  // y ajustado al rango autorizado (minimo/maximo) si esta definido.
+  const suggestedPrice = (() => {
+    const cost = parseFloat(String(costPrice));
+    const m = parseFloat(String(targetMargin));
+    if (!(cost > 0) || isNaN(m) || m < 0 || m >= 100) return null;
+    let price = Math.ceil((cost / (1 - m / 100)) * 2) / 2;
+    const min = minSalePrice === '' ? null : parseFloat(String(minSalePrice));
+    const max = maxSalePrice === '' ? null : parseFloat(String(maxSalePrice));
+    if (min !== null && !isNaN(min) && price < min) price = min;
+    if (max !== null && !isNaN(max) && price > max) price = max;
+    return price;
+  })();
+
+  const salePriceNum = parseFloat(String(salePrice));
+  const costPriceNum = parseFloat(String(costPrice));
+  const hasProfitData = salePriceNum > 0 && costPriceNum > 0;
+  const profitPerUnit = hasProfitData ? salePriceNum - costPriceNum : 0;
 
   const hasErrors = Object.keys(errors).length > 0;
 
@@ -197,11 +254,12 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
       open={isOpen}
       onOpenChange={(open) => !open && onCancel()}
       icon={Package}
-      title={editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+      title={editingProduct ? 'Editar Producto' : 'Agregar producto'}
       description={editingProduct ? 'Actualiza los datos del producto.' : 'Añade un nuevo producto a tu catálogo.'}
       size="xl"
-      submitLabel={editingProduct ? 'Actualizar' : 'Crear producto'}
+      submitLabel={editingProduct ? 'Actualizar' : 'Agregar producto'}
       onSubmit={handleSubmit}
+      isSubmitting={isSubmitting}
       error={hasErrors ? 'Revisa los campos marcados en rojo.' : null}
     >
       <FormSection icon={Package} title="Datos del producto">
@@ -229,34 +287,11 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
           </FormField>
 
           <FormField label="Categoría" htmlFor="category">
-            <Select value={categoryId} onValueChange={setCategoryId}>
-              <SelectTrigger id="category">
-                <SelectValue placeholder="Sin categoría" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_CATEGORY}>Sin categoría</SelectItem>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategorySelect id="category" value={categoryId} onChange={setCategoryId} categories={categories} noneValue={NO_CATEGORY} />
           </FormField>
 
           <FormField label="Unidad de medida" htmlFor="unit">
-            <Select value={unit} onValueChange={setUnit}>
-              <SelectTrigger id="unit">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {UNITS.map((u) => (
-                  <SelectItem key={u} value={u}>
-                    {u}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <UnitSelect id="unit" value={unit} onChange={setUnit} />
           </FormField>
         </FormGrid>
       </FormSection>
@@ -319,14 +354,88 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
             <p className="mt-1 text-xs text-muted-foreground">Vacío = sin límite.</p>
           </FormField>
 
-          <FormField label="Margen de ganancia">
-            <div className="pt-2 text-lg font-semibold text-green-600">{margin}%</div>
-          </FormField>
+          {/* Ganancia y precio sugerido */}
+          <div className="rounded-lg border border-green-200 bg-green-50/60 p-4 sm:col-span-2 dark:border-green-900 dark:bg-green-950/20">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-green-700 dark:text-green-400">
+              <TrendingUp className="h-4 w-4" />
+              Ganancia y precio sugerido
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <label htmlFor="targetMargin" className="text-xs font-medium text-muted-foreground">
+                  Ganancia deseada (%)
+                </label>
+                <div className="relative mt-1">
+                  <Input
+                    id="targetMargin"
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="99"
+                    value={targetMargin}
+                    onChange={(e) => setTargetMargin(e.target.value)}
+                    className="pr-8"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  De cada Bs 100 que vendas, cuánto quieres que sea ganancia.
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Precio sugerido</p>
+                {suggestedPrice !== null ? (
+                  <>
+                    <p className="mt-1 text-2xl font-bold">Bs {suggestedPrice.toFixed(2)}</p>
+                    <button
+                      type="button"
+                      className="mt-1 text-xs font-medium text-green-700 underline-offset-2 hover:underline dark:text-green-400"
+                      onClick={() => setSalePrice(suggestedPrice.toFixed(2))}
+                    >
+                      Usar este precio
+                    </button>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">Escribe el precio de compra para ver la sugerencia.</p>
+                )}
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Tu ganancia con el precio actual</p>
+                {hasProfitData ? (
+                  <>
+                    <p className={profitPerUnit >= 0 ? 'mt-1 text-2xl font-bold text-green-600' : 'mt-1 text-2xl font-bold text-red-600'}>
+                      {margin}%
+                    </p>
+                    <p className={profitPerUnit >= 0 ? 'text-xs text-green-700 dark:text-green-400' : 'text-xs text-red-600'}>
+                      {profitPerUnit >= 0 ? 'Ganas' : 'Pierdes'} Bs {Math.abs(profitPerUnit).toFixed(2)} por unidad
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">Completa compra y venta para verla.</p>
+                )}
+              </div>
+            </div>
+          </div>
         </FormGrid>
       </FormSection>
 
       <FormSection icon={Boxes} title="Inventario">
         <FormGrid>
+          {editingProduct && (
+            <div className="rounded-lg border bg-muted/40 p-3 sm:col-span-2">
+              <p className="text-xs font-medium text-muted-foreground">Stock actual en esta sucursal</p>
+              <p className="mt-1 text-2xl font-bold">
+                {currentStock ?? 0}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Para aumentar la cantidad registra un ingreso en Nuevo Ingreso.
+              </p>
+            </div>
+          )}
+
           <FormField label="Stock mínimo" htmlFor="minStock" required>
             <Input
               id="minStock"
@@ -337,6 +446,15 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
               className={errors.minStock ? 'border-red-500' : ''}
             />
             {errors.minStock && <p className="mt-1 text-xs text-red-500">{errors.minStock}</p>}
+          </FormField>
+
+          <FormField label="Fecha de vencimiento" htmlFor="expirationDate">
+            <Input
+              id="expirationDate"
+              type="date"
+              value={expirationDate}
+              onChange={(e) => setExpirationDate(e.target.value)}
+            />
           </FormField>
 
           {/* Stock inicial (solo al crear) */}
@@ -359,6 +477,19 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
           )}
         </FormGrid>
       </FormSection>
+
+      {canEditStatus && (
+        <FormSection icon={ToggleRight} title="Estado">
+          <FormField label="Estado del producto" htmlFor="product-status">
+            <div className="flex items-center gap-3 pt-1">
+              <Switch id="product-status" checked={isActive} onCheckedChange={setIsActive} />
+              <span className="text-sm text-muted-foreground">
+                {isActive ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+          </FormField>
+        </FormSection>
+      )}
 
       <FormSection icon={ImageIcon} title="Descripción e imagen">
         <div className="space-y-4">
@@ -388,7 +519,8 @@ export function ProductFormDialog({ isOpen, editingProduct, categories = [], onS
                   />
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     <Upload className="h-5 w-5" />
-                    <p className="text-sm">Haz clic para subir una imagen</p>
+                    <p className="text-sm">Haz clic para subir una imagen (m&aacute;x. 2 MB)</p>
+                    {errors.image && <p className="text-xs text-red-500">{errors.image}</p>}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, RotateCcw, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,7 +57,7 @@ export function DeletedProductsTab({ onRestored }: DeletedProductsTabProps) {
   };
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   return (
     <div className="space-y-4">

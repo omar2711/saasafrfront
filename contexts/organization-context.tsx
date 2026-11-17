@@ -11,9 +11,18 @@ import {
 import type { Organization, Branch, User } from '@/types';
 import { API_BASE_URL, getToken, getTenantId, clearAuth, setAuth } from '@/lib/api-client';
 import { organizationsApi, type OrgDto, type BranchDto } from '@/lib/api/organizations';
-import { setOrgTimeZone } from '@/lib/format';
+import { setOrgTimeZone, setBaseCurrency, setTaxName } from '@/lib/format';
+import { systemSettingsApi } from '@/lib/api/system-settings';
 import { useIdleLogout } from '@/hooks/use-idle-logout';
 import { Clock } from 'lucide-react';
+
+export interface SystemSettingsInfo {
+  taxName: string;
+  taxRate: number;
+  baseCurrency: string;
+}
+
+const DEFAULT_SYSTEM_SETTINGS: SystemSettingsInfo = { taxName: 'IVA', taxRate: 13, baseCurrency: 'BOB' };
 
 interface OrganizationContextType {
   organization: Organization | null;
@@ -28,6 +37,8 @@ interface OrganizationContextType {
   canViewAllBranches: boolean;
   isLoading: boolean;
   logout: () => void;
+  systemSettings: SystemSettingsInfo;
+  refreshSystemSettings: () => Promise<void>;
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -77,6 +88,18 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [planFeatures, setPlanFeatures] = useState<string[] | null>(null);
   const [canViewAllBranches, setCanViewAllBranches] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [systemSettings, setSystemSettings] = useState<SystemSettingsInfo>(DEFAULT_SYSTEM_SETTINGS);
+
+  const refreshSystemSettings = useCallback(async () => {
+    try {
+      const s = await systemSettingsApi.get();
+      setBaseCurrency(s.baseCurrency);
+      setTaxName(s.taxName);
+      setSystemSettings({ taxName: s.taxName, taxRate: s.taxRate, baseCurrency: s.baseCurrency });
+    } catch {
+      // Sin configuracion se quedan los valores de siempre: IVA 13% en BOB.
+    }
+  }, []);
 
   // Si el usuario no puede ver todas las sucursales, queda bloqueado a la asignada.
   const setCurrentBranch = useCallback(
@@ -136,6 +159,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         // los generadores de PDF/Excel que no son componentes de React.
         setOrgTimeZone(org.timezone);
         setOrganization(mapOrg(org));
+        void refreshSystemSettings();
 
         const [branchDtos, permResult] = await Promise.all([
           organizationsApi.listBranches(),
@@ -169,6 +193,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setPermissions(permResult.permissions);
         setPlanFeatures(permResult.planFeatures ?? []);
 
+        const perm = permResult as typeof permResult & { userName?: string | null; roleNames?: string[] };
         const email = localStorage.getItem('user_email') ?? '';
         const rawName = email ? email.split('@')[0].replace(/[._-]/g, ' ') : 'Usuario';
         const displayName = rawName
@@ -179,7 +204,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setCurrentUser({
           id: '',
           email,
-          name: displayName,
+          name: perm.userName?.trim() || displayName,
+          roleNames: perm.roleNames ?? [],
           role: 'admin',
           isActive: true,
           createdAt: new Date(),
@@ -218,6 +244,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         hasPlanFeature,
         canViewAllBranches,
         isLoading,
+        systemSettings,
+        refreshSystemSettings,
         logout,
       }}
     >
@@ -275,4 +303,9 @@ export function useOrganization() {
     throw new Error('useOrganization must be used within an OrganizationProvider');
   }
   return context;
+}
+
+/** Impuesto y moneda configurados en "Configuracion del sistema". */
+export function useSystemSettings(): SystemSettingsInfo {
+  return useOrganization().systemSettings;
 }

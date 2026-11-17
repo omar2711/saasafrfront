@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -129,6 +129,8 @@ const navigation: NavGroup[] = [
           // habia que escribir la URL a mano para llegar al horario laboral.
           { title: 'Datos de la Empresa', href: '/mi-tienda/configuracion?tab=general', requiredPermission: 'settings.read' },
           { title: 'Horario Laboral', href: '/mi-tienda/configuracion?tab=horario', requiredPermission: 'settings.read' },
+          { title: 'Configuraci\u00f3n del Sistema', href: '/mi-tienda/sistema', requiredPermission: 'settings.read' },
+          { title: 'Tipo de Cambio', href: '/mi-tienda/tipo-de-cambio', requiredPermission: 'settings.read' },
           { title: 'Suscripción', href: '/mi-tienda/suscripcion', requiredPermission: 'settings.read' },
         ],
       },
@@ -178,6 +180,8 @@ export function TenantSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { organization, currentUser, hasPermission, hasPlanFeature, permissions, logout } = useOrganization();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   /**
    * Los hijos de Reportes apuntan a "/reportes?tab=ventas". `pathname` no
@@ -226,7 +230,7 @@ export function TenantSidebar() {
     ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
 
-  const planName = organization?.plan
+  const planName = mounted && organization?.plan
     ? String(organization.plan).charAt(0).toUpperCase() + String(organization.plan).slice(1)
     : 'Professional';
 
@@ -242,7 +246,7 @@ export function TenantSidebar() {
                 </div>
                 <div className="flex min-w-0 flex-col gap-1 leading-none">
                   <span className="truncate text-[15px] font-semibold tracking-tight">
-                    {organization?.name || 'Mi Tienda'}
+                    {mounted ? organization?.name || 'Mi Tienda' : 'Mi Tienda'}
                   </span>
                   <span className="text-xs text-sidebar-foreground/60">Plan {planName}</span>
                 </div>
