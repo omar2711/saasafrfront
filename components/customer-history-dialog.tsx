@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -48,7 +49,7 @@ const QUOTE_STATUS_LABELS: Record<string, string> = {
 };
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 2 }).format(value);
+  new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 2 }).format(value);
 
 export function CustomerHistoryDialog({ isOpen, customer, onClose }: CustomerHistoryDialogProps) {
   const [history, setHistory] = useState<CustomerHistoryDto | null>(null);

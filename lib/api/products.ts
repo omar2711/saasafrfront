@@ -17,6 +17,7 @@ export interface ProductDto {
   maxSalePrice?: number | null;
   unit?: string | null;
   imageUrl?: string | null;
+  expirationDate?: string | null;
   status: 'active' | 'inactive' | 'pending_pricing';
   createdAt: string;
   updatedAt: string;
@@ -34,6 +35,7 @@ export interface CreateProductPayload {
   maxSalePrice?: number | null;
   unit?: string;
   image?: string;
+  expirationDate?: string | null;
   minStock?: number;
   branchId?: string;
 }

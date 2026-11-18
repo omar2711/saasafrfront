@@ -34,9 +34,9 @@ export function QuotationApprovalDialog({
   if (!quote) return null;
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-MX', {
+    return new Intl.NumberFormat('es-BO', {
       style: 'currency',
-      currency: 'MXN',
+      currency: 'BOB',
       minimumFractionDigits: 0,
     }).format(value);
   };

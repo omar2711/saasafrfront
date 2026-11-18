@@ -13,6 +13,7 @@ export interface POItemDto {
   quantity: number;
   unitCost: number;
   totalCost: number;
+  expirationDate?: string | null;
   createdAt: string;
 }
 
@@ -33,6 +34,8 @@ export interface PurchaseOrderDto {
   totalCost: number;
   notes?: string | null;
   itemCount?: number;
+  firstProductName?: string | null;
+  firstProductImage?: string | null;
   createdAt: string;
   updatedAt: string;
   items?: POItemDto[];
@@ -44,8 +47,10 @@ export interface CreatePOItemPayload {
   sku?: string;
   category?: string;
   unit?: string;
+  image?: string;
   quantity: number;
   unitCost: number;
+  expirationDate?: string;
 }
 
 export interface CreatePurchaseOrderPayload {

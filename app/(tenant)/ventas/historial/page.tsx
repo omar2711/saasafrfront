@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useState, useEffect, useCallback } from 'react';
 import { Search, MoreHorizontal, Eye, Ban, Undo2, Loader2, Package, Package2, Receipt, History, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
@@ -112,7 +113,7 @@ export default function SalesHistoryPage() {
   }, [loadData]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   const getBranchName = (id: string) => branches.find((b) => b.id === id)?.name ?? '—';
 

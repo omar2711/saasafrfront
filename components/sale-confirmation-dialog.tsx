@@ -1,5 +1,6 @@
 'use client';
 
+import { taxLabelFromTotals } from '@/lib/format';
 import { Loader2, Truck, PackageCheck, AlertTriangle, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -137,10 +138,12 @@ export function SaleConfirmationDialog({
             <span className="text-muted-foreground">Subtotal</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">IT (13%)</span>
-            <span>{formatCurrency(tax)}</span>
-          </div>
+          {tax > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">{taxLabelFromTotals(total, tax)}</span>
+              <span>{formatCurrency(tax)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-lg font-bold">
             <span>Total</span>
             <span>{formatCurrency(total)}</span>

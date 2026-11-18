@@ -2,18 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Truck } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
 import {
   Select,
   SelectContent,
@@ -27,7 +19,7 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: 'Efectivo',
   card: 'Tarjeta',
   transfer: 'Transferencia',
-  credit: 'Credito',
+  credit: 'Crédito',
   other: 'Otro',
 };
 
@@ -90,26 +82,23 @@ export function DeliverSaleDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Truck className="h-5 w-5 text-primary" />
-            Entregar venta {sale.saleNumber}
-          </DialogTitle>
-          <DialogDescription>
-            Al entregar se descuenta el stock reservado. {hasBalance
-              ? 'Registra el cobro del saldo pendiente.'
-              : 'Esta venta ya esta pagada por completo.'}
-          </DialogDescription>
-        </DialogHeader>
-
-        {(error || localError) && (
-          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {localError ?? error}
-          </div>
-        )}
-
+    <FormDialog
+      open={isOpen}
+      onOpenChange={(open) => !open && onCancel()}
+      icon={Truck}
+      title={`Entregar venta ${sale.saleNumber}`}
+      description={
+        hasBalance
+          ? 'Al entregar se descuenta el stock reservado. Registra el cobro del saldo pendiente.'
+          : 'Al entregar se descuenta el stock reservado. Esta venta ya está pagada por completo.'
+      }
+      size="md"
+      submitLabel={hasBalance ? 'Cobrar y entregar' : 'Entregar'}
+      onSubmit={handleConfirm}
+      isSubmitting={isSubmitting}
+      error={localError ?? error ?? null}
+    >
+      <FormSection icon={Truck} title="Resumen de la venta">
         <div className="space-y-1.5 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Total</span>
@@ -125,11 +114,12 @@ export function DeliverSaleDialog({
             <span className={hasBalance ? 'text-primary' : ''}>{formatCurrency(balanceDue)}</span>
           </div>
         </div>
+      </FormSection>
 
-        {hasBalance && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="deliver-amount">Monto a cobrar *</Label>
+      {hasBalance && (
+        <FormSection icon={Truck} title="Cobro del saldo">
+          <FormGrid>
+            <FormField label="Monto a cobrar" htmlFor="deliver-amount" required>
               <Input
                 id="deliver-amount"
                 type="number"
@@ -138,9 +128,8 @@ export function DeliverSaleDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="deliver-method">Metodo de pago *</Label>
+            </FormField>
+            <FormField label="Método de pago" htmlFor="deliver-method" required>
               <Select value={method} onValueChange={(value) => setMethod(value as PaymentMethod)}>
                 <SelectTrigger id="deliver-method">
                   <SelectValue />
@@ -151,17 +140,10 @@ export function DeliverSaleDialog({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>Cancelar</Button>
-          <Button onClick={handleConfirm} disabled={isSubmitting}>
-            {isSubmitting ? 'Entregando...' : hasBalance ? 'Cobrar y entregar' : 'Entregar'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            </FormField>
+          </FormGrid>
+        </FormSection>
+      )}
+    </FormDialog>
   );
 }

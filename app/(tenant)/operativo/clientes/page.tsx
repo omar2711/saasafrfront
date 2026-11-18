@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Search, MoreHorizontal, Users, Mail, Phone, MapPin, Edit, Trash2, Eye, History, Loader2,
+  Plus, Search, MoreHorizontal, Users, Mail, Phone, MapPin, Edit, Trash2, Eye, History, Loader2, CheckCircle2,
 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,13 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [listError, setListError] = useState('');
+  const [notice, setNotice] = useState<{ title: string; description: string } | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -121,8 +128,13 @@ export default function CustomersPage() {
     setIsSubmitting(true);
     setFormError(null);
     try {
+      const createdName = formData.name.trim();
       await customersApi.create(buildPayload());
       setIsCreateOpen(false);
+      setNotice({
+        title: '\u00a1Cliente creado!',
+        description: `El cliente "${createdName}" se registr\u00f3 correctamente.`,
+      });
       await loadCustomers();
     } catch (e: unknown) {
       // El backend devuelve 409 con el mensaje de CI/NIT duplicado.
@@ -158,6 +170,11 @@ export default function CustomersPage() {
         status: customer.status === 'active' ? 'inactive' : 'active',
       });
       await loadCustomers();
+      setNotice(
+        customer.status === 'active'
+          ? { title: '\u00a1Cliente desactivado!', description: `El cliente "${customer.name}" qued\u00f3 inactivo.` }
+          : { title: '\u00a1Cliente activado!', description: `El cliente "${customer.name}" qued\u00f3 activo.` },
+      );
     } catch (e: unknown) {
       setListError(e instanceof Error ? e.message : 'No se pudo cambiar el estado del cliente');
     }
@@ -167,9 +184,14 @@ export default function CustomersPage() {
     if (!deletingCustomer) return;
     setListError('');
     try {
+      const deletedName = deletingCustomer.name;
       await customersApi.delete(deletingCustomer.id);
       setDeletingCustomer(null);
       await loadCustomers();
+      setNotice({
+        title: '\u00a1Cliente eliminado!',
+        description: `El cliente "${deletedName}" ya no aparece en el listado.`,
+      });
     } catch (e: unknown) {
       setListError(e instanceof Error ? e.message : 'No se pudo eliminar el cliente');
     }
@@ -201,6 +223,18 @@ export default function CustomersPage() {
 
       {listError && (
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{listError}</div>
+      )}
+
+      {notice && (
+        <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-3xl border bg-card p-8 text-center text-card-foreground shadow-2xl animate-in zoom-in-90 duration-300">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 ring-8 ring-emerald-50">
+              <CheckCircle2 className="h-9 w-9 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold">{notice.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{notice.description}</p>
+          </div>
+        </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -347,7 +381,7 @@ export default function CustomersPage() {
       )}
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo cliente</DialogTitle>
             <DialogDescription>El CI/NIT no puede repetirse entre clientes.</DialogDescription>
@@ -356,6 +390,7 @@ export default function CustomersPage() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleCreate}
+            onCancel={() => setIsCreateOpen(false)}
             submitLabel="Crear cliente"
             isSubmitting={isSubmitting}
             error={formError}
@@ -365,7 +400,7 @@ export default function CustomersPage() {
       </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar cliente</DialogTitle>
             <DialogDescription>Actualiza los datos de {selectedCustomer?.name}.</DialogDescription>
@@ -374,6 +409,7 @@ export default function CustomersPage() {
             formData={formData}
             setFormData={setFormData}
             onSubmit={handleEdit}
+            onCancel={() => setIsEditOpen(false)}
             submitLabel="Guardar cambios"
             isSubmitting={isSubmitting}
             error={formError}

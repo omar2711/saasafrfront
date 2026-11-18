@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
@@ -55,6 +56,33 @@ import { Badge } from '@/components/ui/badge';
 import { BranchSelector } from '@/components/branch-selector';
 import { useOrganization } from '@/contexts/organization-context';
 
+// Colores propios del sidebar (misma paleta azul de la landing y el login).
+// Se aplican solo aquí; el resto del dashboard no cambia. Estilo claro y sobrio.
+const sidebarTheme = {
+  '--sidebar': 'oklch(0.97 0.014 250)',
+  '--sidebar-foreground': 'oklch(0.3 0.03 258)',
+  '--sidebar-primary': 'oklch(0.55 0.2 258)',
+  '--sidebar-primary-foreground': 'oklch(0.99 0 0)',
+  '--sidebar-accent': 'oklch(0.93 0.025 250)',
+  '--sidebar-accent-foreground': 'oklch(0.22 0.04 258)',
+  '--sidebar-border': 'oklch(0.89 0.02 250)',
+  '--sidebar-ring': 'oklch(0.55 0.2 258)',
+} as CSSProperties;
+
+// Un color suave por grupo para los íconos (el activo va en azul sólido).
+const groupIconColor: Record<string, string> = {
+  General: 'text-[oklch(0.55_0.2_258)]',
+  'Mi Tienda': 'text-[oklch(0.55_0.18_285)]',
+  Operativo: 'text-[oklch(0.6_0.13_180)]',
+  Ventas: 'text-[oklch(0.6_0.16_150)]',
+  Análisis: 'text-[oklch(0.68_0.16_65)]',
+  Sistema: 'text-[oklch(0.55_0.06_255)]',
+};
+const iconColorOf = (group: string) => groupIconColor[group] ?? 'text-[oklch(0.55_0.2_258)]';
+
+const navButtonClass =
+  'group/nav relative h-9 rounded-md text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary data-[active=true]:font-medium data-[active=true]:text-white data-[active=true]:shadow-sm data-[active=true]:hover:bg-sidebar-primary';
+
 interface NavChild {
   title: string;
   href: string;
@@ -101,7 +129,9 @@ const navigation: NavGroup[] = [
           // habia que escribir la URL a mano para llegar al horario laboral.
           { title: 'Datos de la Empresa', href: '/mi-tienda/configuracion?tab=general', requiredPermission: 'settings.read' },
           { title: 'Horario Laboral', href: '/mi-tienda/configuracion?tab=horario', requiredPermission: 'settings.read' },
-          { title: 'Suscripcion', href: '/mi-tienda/suscripcion', requiredPermission: 'settings.read' },
+          { title: 'Configuraci\u00f3n del Sistema', href: '/mi-tienda/sistema', requiredPermission: 'settings.read' },
+          { title: 'Tipo de Cambio', href: '/mi-tienda/tipo-de-cambio', requiredPermission: 'settings.read' },
+          { title: 'Suscripción', href: '/mi-tienda/suscripcion', requiredPermission: 'settings.read' },
         ],
       },
     ],
@@ -111,7 +141,7 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Proveedores', href: '/operativo/proveedores', icon: Truck, requiredPermission: 'suppliers.read', requiredPlanFeature: 'module_suppliers' },
       { title: 'Clientes', href: '/operativo/clientes', icon: Users, requiredPermission: 'customers.read', requiredPlanFeature: 'module_customers' },
-      { title: 'Ordenes de Compra', href: '/operativo/ordenes-compra', icon: ClipboardList, requiredPermission: 'purchases.read', requiredPlanFeature: 'module_purchases' },
+      { title: 'Nuevo Ingreso', href: '/operativo/ordenes-compra', icon: ClipboardList, requiredPermission: 'purchases.read', requiredPlanFeature: 'module_purchases' },
       { title: 'Inventario', href: '/operativo/inventario', icon: Package, requiredPermission: 'inventory.read', requiredPlanFeature: 'module_inventory' },
     ],
   },
@@ -120,13 +150,12 @@ const navigation: NavGroup[] = [
     items: [
       { title: 'Cotizaciones', href: '/ventas/cotizaciones', icon: FileText, requiredPermission: 'quotes.read', requiredPlanFeature: 'module_quotes' },
       { title: 'Punto de Venta', href: '/ventas/pos', icon: ShoppingCart, requiredPermission: 'sales.write', requiredPlanFeature: 'module_sales' },
-      { title: 'Historial de Ventas', href: '/ventas/historial', icon: Receipt, requiredPermission: 'sales.read', requiredPlanFeature: 'module_sales' },
       { title: 'Ventas Pendientes', href: '/ventas/pendientes', icon: Clock, requiredPermission: 'sales.read', requiredPlanFeature: 'module_sales' },
       { title: 'Caja Chica', href: '/ventas/caja-chica', icon: Calculator, requiredPermission: 'petty_cash.read', requiredPlanFeature: 'module_petty_cash' },
     ],
   },
   {
-    title: 'Analisis',
+    title: 'Análisis',
     items: [
       {
         title: 'Reportes',
@@ -135,14 +164,13 @@ const navigation: NavGroup[] = [
         requiredPlanFeature: 'module_reports',
         children: [
           { title: 'Historial de Inventario', href: '/reportes?tab=inventario', requiredPermission: 'reports.read' },
-          { title: 'Historial de Ventas', href: '/reportes?tab=ventas', requiredPermission: 'reports.read' },
           { title: 'Historial de Cotizaciones', href: '/reportes?tab=cotizaciones', requiredPermission: 'reports.read' },
           { title: 'Historial de Compras', href: '/reportes?tab=compras', requiredPermission: 'reports.read' },
           { title: 'Clientes', href: '/reportes?tab=clientes', requiredPermission: 'reports.read' },
           { title: 'Bajas de Inventario', href: '/reportes?tab=bajas', requiredPermission: 'reports.read' },
         ],
       },
-      { title: 'Auditoria', href: '/auditoria', icon: History, requiredPermission: 'audit.read', requiredPlanFeature: 'module_audit' },
+      { title: 'Auditoría', href: '/auditoria', icon: History, requiredPermission: 'audit.read', requiredPlanFeature: 'module_audit' },
       { title: 'Soporte', href: '/soporte', icon: LifeBuoy, requiredPermission: 'support.read' },
     ],
   },
@@ -152,6 +180,8 @@ export function TenantSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { organization, currentUser, hasPermission, hasPlanFeature, permissions, logout } = useOrganization();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   /**
    * Los hijos de Reportes apuntan a "/reportes?tab=ventas". `pathname` no
@@ -200,68 +230,84 @@ export function TenantSidebar() {
     ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
 
+  const planName = mounted && organization?.plan
+    ? String(organization.plan).charAt(0).toUpperCase() + String(organization.plan).slice(1)
+    : 'Professional';
+
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarHeader>
+    <Sidebar collapsible="icon" className="border-r-0" style={sidebarTheme}>
+      <SidebarHeader className="px-3 pb-2 pt-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/mi-tienda/dashboard">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Store className="size-4" />
+                <div className="flex aspect-square size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <Store className="size-[18px]" />
                 </div>
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold truncate">
-                    {organization?.name || 'Mi Tienda'}
+                <div className="flex min-w-0 flex-col gap-1 leading-none">
+                  <span className="truncate text-[15px] font-semibold tracking-tight">
+                    {mounted ? organization?.name || 'Mi Tienda' : 'Mi Tienda'}
                   </span>
-                  <span className="text-xs text-sidebar-foreground/70">
-                    Plan {organization?.plan || 'Professional'}
-                  </span>
+                  <span className="text-xs text-sidebar-foreground/60">Plan {planName}</span>
                 </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <div className="px-2 py-2">
+        <div className="px-1 pt-2">
           <BranchSelector />
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="px-1">
         {filteredNavigation.map((group) => (
           <SidebarGroup key={group.title}>
-            <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
+            <SidebarGroupLabel className="text-xs font-semibold text-[oklch(0.5_0.09_258)]">
+              {group.title}
+            </SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="gap-0.5">
                 {group.items.map((item) => {
                   if (item.children) {
+                    const childActive = !!isChildActive(item.children);
                     return (
                       <Collapsible
                         key={item.title}
                         asChild
-                        defaultOpen={isChildActive(item.children)}
+                        defaultOpen={childActive}
                         className="group/collapsible"
                       >
                         <SidebarMenuItem>
                           <CollapsibleTrigger asChild>
-                            <SidebarMenuButton tooltip={item.title}>
-                              <item.icon className="size-4" />
+                            <SidebarMenuButton
+                              tooltip={item.title}
+                              className={`${navButtonClass} ${childActive ? 'font-medium text-sidebar-accent-foreground' : ''}`}
+                            >
+                              <item.icon
+                                className={`size-[18px] ${iconColorOf(group.title)}`}
+                              />
                               <span>{item.title}</span>
-                              <ChevronRight className="ml-auto size-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                              <ChevronRight className="ml-auto size-4 text-sidebar-foreground/40 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                             </SidebarMenuButton>
                           </CollapsibleTrigger>
                           <CollapsibleContent>
-                            <SidebarMenuSub>
-                              {item.children.map((child) => (
-                                <SidebarMenuSubItem key={child.href}>
-                                  <SidebarMenuSubButton
-                                    asChild
-                                    isActive={isActive(child.href)}
-                                  >
-                                    <Link href={child.href}>{child.title}</Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              ))}
+                            <SidebarMenuSub className="mx-5 my-1 gap-0.5 px-2">
+                              {item.children.map((child) => {
+                                const active = isActive(child.href);
+                                return (
+                                  <SidebarMenuSubItem key={child.href}>
+                                    <SidebarMenuSubButton
+                                      asChild
+                                      isActive={active}
+                                      className="h-8 rounded-md text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-primary/10 data-[active=true]:font-medium data-[active=true]:text-[oklch(0.42_0.18_258)]"
+                                    >
+                                      <Link href={child.href}>
+                                        {child.title}
+                                      </Link>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                );
+                              })}
                             </SidebarMenuSub>
                           </CollapsibleContent>
                         </SidebarMenuItem>
@@ -269,15 +315,19 @@ export function TenantSidebar() {
                     );
                   }
 
+                  const active = isActive(item.href!);
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
                         asChild
-                        isActive={isActive(item.href!)}
+                        isActive={active}
                         tooltip={item.title}
+                        className={navButtonClass}
                       >
                         <Link href={item.href!}>
-                          <item.icon className="size-4" />
+                          <item.icon
+                            className={`size-[18px] ${active ? 'text-white' : iconColorOf(group.title)}`}
+                          />
                           <span>{item.title}</span>
                           {item.badge && (
                             <Badge
@@ -306,7 +356,7 @@ export function TenantSidebar() {
         ))}
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="border-t border-sidebar-border p-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -315,20 +365,22 @@ export function TenantSidebar() {
                   size="lg"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                      {userInitials}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-sidebar-primary text-xs font-semibold text-sidebar-primary-foreground">
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">
                       {currentUser?.name || 'Usuario'}
                     </span>
-                    <span className="truncate text-xs text-sidebar-foreground/70">
+                    <span className="truncate text-xs text-sidebar-foreground/60">
                       {currentUser?.email || 'usuario@empresa.com'}
                     </span>
                   </div>
-                  <ChevronsUpDown className="ml-auto size-4" />
+                  <ChevronsUpDown className="ml-auto size-4 text-sidebar-foreground/50" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -344,7 +396,7 @@ export function TenantSidebar() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout} className="text-destructive cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
-                  Cerrar sesion
+                  Cerrar sesión
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

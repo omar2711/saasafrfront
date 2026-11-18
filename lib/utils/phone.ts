@@ -24,3 +24,20 @@ export function joinPhone(phoneCountryCode: string, phone: string): string {
   const trimmed = phone.trim();
   return trimmed ? `${phoneCountryCode} ${trimmed}` : '';
 }
+
+/** Devuelve el mensaje de error, o null si el número es válido (o está vacío). */
+export function validatePhone(phoneCountryCode: string, phone: string): string | null {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  if (phoneCountryCode === '+591') {
+    if (digits.length !== 8) return 'En Bolivia el número debe tener 8 dígitos';
+    if (!/^[234679]/.test(digits) || /^[89]/.test(digits)) {
+      return 'Debe empezar con 2, 3 o 4 (fijo) o con 6 o 7 (celular)';
+    }
+    return null;
+  }
+  if (digits.length < 6 || digits.length > 14) {
+    return 'El número debe tener entre 6 y 14 dígitos';
+  }
+  return null;
+}

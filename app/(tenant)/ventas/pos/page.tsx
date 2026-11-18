@@ -1,5 +1,6 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
 import { useState, useCallback } from 'react';
 import { useLiveApiEffect } from '@/hooks/use-live-api-effect';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -14,6 +15,7 @@ import {
   Receipt,
   User,
   X,
+  HandCoins,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,7 +33,7 @@ import { AdvanceSaleDialog, type InsufficientCartItem } from '@/components/advan
 import { SaleConfirmationDialog } from '@/components/sale-confirmation-dialog';
 import { SaleReceiptDialog, type SaleReceiptData } from '@/components/sale-receipt-dialog';
 import { PosCustomerDialog, type PosCustomer } from '@/components/pos-customer-dialog';
-import { useOrganization } from '@/contexts/organization-context';
+import { useOrganization, useSystemSettings } from '@/contexts/organization-context';
 
 interface CartItem {
   key: string;
@@ -75,6 +77,7 @@ export default function POSPage() {
   const [saleCustomer, setSaleCustomer] = useState<PosCustomer | null>(null);
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [withInvoice, setWithInvoice] = useState(false);
+  const [applyTax, setApplyTax] = useState(true);
   const [returnToConfirmation, setReturnToConfirmation] = useState(false);
 
   const loadCatalog = useCallback(async (isCurrent: () => boolean) => {
@@ -109,7 +112,7 @@ export default function POSPage() {
     branchPriceMap[product.id] ?? product.salePrice;
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   const getKitAvailableQty = (kit: KitDto) => {
     if (kit.items.length === 0) return 0;
@@ -174,6 +177,11 @@ export default function POSPage() {
     );
   };
 
+  const setQuantity = (key: string, value: number) => {
+    const qty = Math.max(1, Math.floor(value) || 1);
+    setCart((prev) => prev.map((item) => (item.key === key ? { ...item, quantity: qty } : item)));
+  };
+
   const removeFromCart = (key: string) => {
     setCart((prev) => prev.filter((item) => item.key !== key));
   };
@@ -212,10 +220,12 @@ export default function POSPage() {
   const blockedByPrice = (outOfRangeItems.length > 0 && !canOverridePrice) ||
     invalidDiscountItems.length > 0;
 
+  const totalUnits = cart.reduce((sum, item) => sum + item.quantity, 0);
   const grossSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discountTotal = cart.reduce((sum, item) => sum + item.discount, 0);
   const subtotal = grossSubtotal - discountTotal;
-  const tax = subtotal * 0.13;
+  const { taxName, taxRate } = useSystemSettings();
+  const tax = applyTax ? subtotal * (taxRate / 100) : 0;
   const total = subtotal + tax;
 
   // Los kits no se pueden reservar contra una orden de compra, asi que no entran en
@@ -304,6 +314,10 @@ export default function POSPage() {
 
   const openConfirmation = (method: PaymentMethod) => {
     if (cart.length === 0) return;
+    if (method === 'credit' && !saleCustomer) {
+      setSaleError('Para vender a crédito primero agrega un cliente.');
+      return;
+    }
     setSelectedMethod(method);
     setIsConfirmOpen(true);
   };
@@ -457,15 +471,23 @@ export default function POSPage() {
                   onClick={() => addProductToCart(product)}
                 >
                   <CardContent className="p-4">
-                    <div className="relative aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
-                      <span className="text-3xl text-muted-foreground">
-                        {product.name.charAt(0)}
-                      </span>
+                    <div className="relative aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                      {product.imageUrl ? (
+  <img
+    src={product.imageUrl}
+    alt={product.name}
+    className="h-full w-full object-cover"
+  />
+) : (
+  <span className="text-3xl text-muted-foreground">
+    {product.name.charAt(0)}
+  </span>
+)}
                       <Badge
                         variant="secondary"
                         className={`absolute top-1.5 right-1.5 ${stockBadgeClass(stockMap[product.id] ?? 0)}`}
                       >
-                        Stock: {stockMap[product.id] ?? 0}
+                        Disponible: {stockMap[product.id] ?? 0}
                       </Badge>
                     </div>
                     <div>
@@ -488,7 +510,7 @@ export default function POSPage() {
                   onClick={() => addKitToCart(kit)}
                 >
                   <CardContent className="p-4">
-                    <div className="relative aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
+                    <div className="relative aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                       <Badge variant="secondary">Kit</Badge>
                       <Badge
                         variant="secondary"
@@ -527,7 +549,7 @@ export default function POSPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">Venta Actual</CardTitle>
-            <Badge variant="secondary">{cart.length} items</Badge>
+            <Badge variant="secondary">{totalUnits} {totalUnits === 1 ? 'producto' : 'productos'}</Badge>
           </div>
         </CardHeader>
 
@@ -579,7 +601,15 @@ export default function POSPage() {
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            inputMode="numeric"
+                            value={item.quantity}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => setQuantity(item.key, Number(e.target.value))}
+                            className="h-7 w-14 px-1 text-center"
+                          />
                           <Button
                             variant="outline"
                             size="icon"
@@ -599,18 +629,7 @@ export default function POSPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-[11px] text-muted-foreground">Precio unitario</Label>
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={item.price}
-                            onChange={(e) => updatePrice(item.key, Number(e.target.value))}
-                            className={`h-8 ${outOfRange ? 'border-destructive text-destructive' : ''}`}
-                          />
-                        </div>
+                      <div className="grid grid-cols-1 gap-2">
                         <div className="space-y-1">
                           <Label className="text-[11px] text-muted-foreground">Descuento (Bs)</Label>
                           <Input
@@ -663,7 +682,10 @@ export default function POSPage() {
               </div>
             )}
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">IT (13%)</span>
+              <label className="flex cursor-pointer items-center gap-2 text-muted-foreground">
+                <input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="h-4 w-4 accent-primary" />
+                <span>{taxName} ({taxRate}%)</span>
+              </label>
               <span>{formatCurrency(tax)}</span>
             </div>
             <Separator />
@@ -676,7 +698,7 @@ export default function POSPage() {
           {!lastSaleNumber && outOfRangeItems.length > 0 && !canOverridePrice && (
             <div className="w-full mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
               Hay {outOfRangeItems.length} linea(s) con un precio fuera del rango autorizado. Corrige
-              el precio o pide a un Gerente que autorice la venta.
+              el precio o pide a un Propietario que autorice la venta.
             </div>
           )}
 
@@ -730,7 +752,7 @@ export default function POSPage() {
               </Button>
             )}
             {!lastSaleNumber && insufficientItems.length === 0 && kitShortages.length === 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -757,6 +779,15 @@ export default function POSPage() {
                 >
                   <Building2 className="mr-1 h-4 w-4" />
                   Transfer
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={cart.length === 0 || isProcessing || blockedByPrice}
+                  onClick={() => openConfirmation('credit')}
+                >
+                  <HandCoins className="mr-1 h-4 w-4" />
+                  Crédito
                 </Button>
               </div>
             )}
@@ -849,3 +880,6 @@ export default function POSPage() {
     </div>
   );
 }
+
+
+

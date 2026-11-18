@@ -23,7 +23,7 @@ interface ProductDetailsDialogProps {
 }
 
 const formatCurrency = (value: number) =>
-  `Bs ${value.toLocaleString('es-BO')}`;
+  new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 2 }).format(value);
 
 export function ProductDetailsDialog({ isOpen, product, stock = 0, minStock = 0, onClose }: ProductDetailsDialogProps) {
   if (!product) return null;

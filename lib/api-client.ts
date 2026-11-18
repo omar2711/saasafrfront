@@ -99,6 +99,45 @@ export class ApiError extends Error {
   }
 }
 
+const REFRESH_PATH = '/auth/refresh';
+let refreshing: Promise<string | null> | null = null;
+
+/** Pide un access token nuevo. Una sola renovación a la vez: el backend rota el refresh token. */
+function refreshAccessToken(): Promise<string | null> {
+  if (refreshing) return refreshing;
+  const attempt = (async (): Promise<string | null> => {
+    if (typeof window === 'undefined') return null;
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return null;
+    try {
+      const res = await fetch(`${API_BASE_URL}${REFRESH_PATH}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        cache: 'no-store',
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data?.accessToken) return null;
+      localStorage.setItem('access_token', data.accessToken);
+      if (data.refreshToken) localStorage.setItem('refresh_token', data.refreshToken);
+      return data.accessToken as string;
+    } catch {
+      return null;
+    }
+  })();
+  refreshing = attempt.finally(() => { refreshing = null; });
+  return refreshing;
+}
+
+/** Sesión vencida del todo: se limpian los datos y se vuelve al login. */
+function endSession() {
+  clearAuth();
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
+}
+
 export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
@@ -124,12 +163,25 @@ export async function apiRequest<T = unknown>(
   }
 
   const load = async (): Promise<T> => {
-    const response = await fetch(`${API_BASE_URL}/${path.replace(/^\/+/, '')}`, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: 'no-store',
-    });
+    const send = (authToken: string | null) =>
+      fetch(`${API_BASE_URL}/${path.replace(/^\/+/, '')}`, {
+        method,
+        headers: authToken ? { ...headers, Authorization: `Bearer ${authToken}` } : headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        cache: 'no-store',
+      });
+
+    let response = await send(token);
+
+    // Access token vencido: se renueva solo y se repite la petición.
+    if (response.status === 401 && token && !path.replace(/^\/+/, '').startsWith('auth/')) {
+      const fresh = await refreshAccessToken();
+      if (fresh) {
+        response = await send(fresh);
+      } else {
+        endSession();
+      }
+    }
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({ message: response.statusText }));
@@ -148,7 +200,10 @@ export async function apiRequest<T = unknown>(
       return undefined as T;
     }
 
-    return response.json() as Promise<T>;
+    // Algunos endpoints (p. ej. DELETE) responden 200 con el cuerpo vacío:
+    // response.json() fallaría con "Unexpected end of JSON input".
+    const text = await response.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   };
   if (method !== 'GET') {
     try { return await load(); }
@@ -158,7 +213,7 @@ export async function apiRequest<T = unknown>(
   url.searchParams.sort();
   const ttl = url.pathname.includes('/stock') ? 3000 : url.pathname.includes('/pricing') ? 10000
     : /\/(products|kits|categories)(\/|$)/.test(url.pathname) ? 60000 : 15000;
-  if (options.cache === false || !token || !tenantId || !path.startsWith('/operations/')) return load();
+  if (options.cache === false || !token || !tenantId || !/^\/(operations|iam)\//.test(path)) return load();
   const rawKey = JSON.stringify([API_BASE_URL, token, tenantId, url.pathname + url.search]);
   // Persist only a one-way digest of the authenticated scope, not the token.
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawKey));

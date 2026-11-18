@@ -11,7 +11,18 @@ import {
 import type { Organization, Branch, User } from '@/types';
 import { API_BASE_URL, getToken, getTenantId, clearAuth, setAuth } from '@/lib/api-client';
 import { organizationsApi, type OrgDto, type BranchDto } from '@/lib/api/organizations';
-import { setOrgTimeZone } from '@/lib/format';
+import { setOrgTimeZone, setBaseCurrency, setTaxName } from '@/lib/format';
+import { systemSettingsApi } from '@/lib/api/system-settings';
+import { useIdleLogout } from '@/hooks/use-idle-logout';
+import { Clock } from 'lucide-react';
+
+export interface SystemSettingsInfo {
+  taxName: string;
+  taxRate: number;
+  baseCurrency: string;
+}
+
+const DEFAULT_SYSTEM_SETTINGS: SystemSettingsInfo = { taxName: 'IVA', taxRate: 13, baseCurrency: 'BOB' };
 
 interface OrganizationContextType {
   organization: Organization | null;
@@ -26,6 +37,8 @@ interface OrganizationContextType {
   canViewAllBranches: boolean;
   isLoading: boolean;
   logout: () => void;
+  systemSettings: SystemSettingsInfo;
+  refreshSystemSettings: () => Promise<void>;
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -75,6 +88,18 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const [planFeatures, setPlanFeatures] = useState<string[] | null>(null);
   const [canViewAllBranches, setCanViewAllBranches] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [systemSettings, setSystemSettings] = useState<SystemSettingsInfo>(DEFAULT_SYSTEM_SETTINGS);
+
+  const refreshSystemSettings = useCallback(async () => {
+    try {
+      const s = await systemSettingsApi.get();
+      setBaseCurrency(s.baseCurrency);
+      setTaxName(s.taxName);
+      setSystemSettings({ taxName: s.taxName, taxRate: s.taxRate, baseCurrency: s.baseCurrency });
+    } catch {
+      // Sin configuracion se quedan los valores de siempre: IVA 13% en BOB.
+    }
+  }, []);
 
   // Si el usuario no puede ver todas las sucursales, queda bloqueado a la asignada.
   const setCurrentBranch = useCallback(
@@ -96,9 +121,12 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ sessionId }),
       }).catch(() => {});
     }
+    localStorage.removeItem('last_activity');
     clearAuth();
     window.location.href = '/login';
   }, []);
+
+  const { warning, secondsLeft, stay } = useIdleLogout(logout);
 
   useEffect(() => {
     const token = getToken();
@@ -131,6 +159,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         // los generadores de PDF/Excel que no son componentes de React.
         setOrgTimeZone(org.timezone);
         setOrganization(mapOrg(org));
+        void refreshSystemSettings();
 
         const [branchDtos, permResult] = await Promise.all([
           organizationsApi.listBranches(),
@@ -164,6 +193,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setPermissions(permResult.permissions);
         setPlanFeatures(permResult.planFeatures ?? []);
 
+        const perm = permResult as typeof permResult & { userName?: string | null; roleNames?: string[] };
         const email = localStorage.getItem('user_email') ?? '';
         const rawName = email ? email.split('@')[0].replace(/[._-]/g, ' ') : 'Usuario';
         const displayName = rawName
@@ -174,7 +204,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setCurrentUser({
           id: '',
           email,
-          name: displayName,
+          name: perm.userName?.trim() || displayName,
+          roleNames: perm.roleNames ?? [],
           role: 'admin',
           isActive: true,
           createdAt: new Date(),
@@ -213,10 +244,55 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         hasPlanFeature,
         canViewAllBranches,
         isLoading,
+        systemSettings,
+        refreshSystemSettings,
         logout,
       }}
     >
       {children}
+      {warning && (
+        <div
+          role="alertdialog"
+          aria-live="assertive"
+          className="fixed bottom-6 right-6 z-50 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-amber-500/30 bg-background shadow-2xl animate-in fade-in slide-in-from-bottom-4"
+        >
+          <div className="flex items-start gap-3 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">¿Sigues ahí?</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Por seguridad, tu sesión se cerrará en{' '}
+                <span className="font-semibold tabular-nums text-foreground">{secondsLeft} s</span>{' '}
+                por inactividad.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 px-4 pb-4">
+            <button
+              type="button"
+              onClick={stay}
+              className="flex-1 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+            >
+              Seguir en sesión
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
+            >
+              Cerrar sesión
+            </button>
+          </div>
+          <div className="h-1 w-full bg-amber-500/15">
+            <div
+              className="h-full bg-amber-500 transition-all duration-1000 ease-linear"
+              style={{ width: `${Math.min(100, (secondsLeft / 60) * 100)}%` }}
+            />
+          </div>
+        </div>
+      )}
     </OrganizationContext.Provider>
   );
 }
@@ -227,4 +303,9 @@ export function useOrganization() {
     throw new Error('useOrganization must be used within an OrganizationProvider');
   }
   return context;
+}
+
+/** Impuesto y moneda configurados en "Configuracion del sistema". */
+export function useSystemSettings(): SystemSettingsInfo {
+  return useOrganization().systemSettings;
 }

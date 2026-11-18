@@ -1,10 +1,13 @@
 'use client';
 
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormField } from '@/components/form-layout';
+import { Tag as CategoryIcon } from 'lucide-react';
+
 import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Plus, MoreHorizontal, Loader2, Tag, ChevronRight, ChevronDown, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,12 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { categoriesApi, type CategoryDto } from '@/lib/api/categories';
 import { productsApi, type ProductDto } from '@/lib/api/products';
 import { useOrganization } from '@/contexts/organization-context';
@@ -160,41 +157,38 @@ export function CategoriesTab() {
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Categoría' : 'Nueva Categoría'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label>Nombre</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Electrónica"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Descripción (opcional)</Label>
-              <Textarea
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                rows={3}
-              />
-            </div>
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editing ? 'Guardar' : 'Crear'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        icon={CategoryIcon}
+        title={editing ? 'Editar Categoría' : 'Nueva Categoría'}
+        description="Las categorías agrupan tus productos para encontrarlos y reportarlos mejor."
+        size="md"
+        submitLabel={editing ? 'Guardar cambios' : 'Crear categoría'}
+        onSubmit={handleSave}
+        isSubmitting={isSaving}
+        error={formError || null}
+      >
+        <FormSection icon={CategoryIcon} title="Datos de la categoría">
+          <FormField label="Nombre" htmlFor="category-name" required>
+            <Input
+              id="category-name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Electrónica"
+            />
+          </FormField>
+          <FormField label="Descripción (opcional)" htmlFor="category-description">
+            <Textarea
+              id="category-description"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              rows={3}
+              placeholder="Ej: Celulares, accesorios y cargadores"
+            />
+          </FormField>
+        </FormSection>
+      </FormDialog>
 
       <Card>
         <CardContent className="p-0">

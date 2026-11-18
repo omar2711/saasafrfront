@@ -1,16 +1,17 @@
 'use client';
 
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { Phone as PhoneIcon, MapPin as PinIcon, Globe as GlobeIcon } from 'lucide-react';
+
+import { PhoneField } from '@/components/phone-field';
+import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
+import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
+
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Building2, Clock, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
+import { Building2, Lock, Loader2, Save, ShieldCheck, Eye, DoorOpen, DoorClosed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,7 +33,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/page-header';
 import { organizationsApi, type WorkScheduleDto } from '@/lib/api/organizations';
 import { rolesApi, type RoleDto } from '@/lib/api/users';
@@ -67,6 +67,7 @@ interface OrgForm {
   taxId: string;
   timezone: string;
   address: string;
+  phoneCountryCode: string;
   phone: string;
   email: string;
   advanceSaleTerms: string;
@@ -77,6 +78,7 @@ const EMPTY_ORG: OrgForm = {
   taxId: '',
   timezone: 'America/La_Paz',
   address: '',
+  phoneCountryCode: DEFAULT_DIAL_CODE,
   phone: '',
   email: '',
   advanceSaleTerms: '',
@@ -92,8 +94,6 @@ function ConfiguracionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get('tab') === 'horario' ? 'horario' : 'general';
-  const setTab = (value: string) =>
-    router.replace(value === 'horario' ? '?tab=horario' : '?tab=general', { scroll: false });
 
   const [orgForm, setOrgForm] = useState<OrgForm>(EMPTY_ORG);
   const [schedule, setSchedule] = useState<WorkScheduleDto | null>(null);
@@ -104,6 +104,8 @@ function ConfiguracionContent() {
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [profileLocked, setProfileLocked] = useState(false);
+  const canEditOrg = canWriteSettings && !profileLocked;
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   // Fuerza el recálculo del estado en vivo mientras la pantalla está abierta.
   const [, setTick] = useState(0);
@@ -134,10 +136,11 @@ function ConfiguracionContent() {
         taxId: org.taxId ?? '',
         timezone: org.timezone,
         address: org.address ?? '',
-        phone: org.phone ?? '',
+        ...splitPhone(org.phone),
         email: org.email ?? '',
         advanceSaleTerms: org.advanceSaleTerms ?? '',
       });
+      setProfileLocked(Boolean((org as unknown as { profileLocked?: boolean }).profileLocked));
       setSchedule(workSchedule);
       setRoles(roleList);
     } catch (e: unknown) {
@@ -153,6 +156,8 @@ function ConfiguracionContent() {
 
   const handleSaveOrg = async () => {
     if (!organization) return;
+    const phoneError = validatePhone(orgForm.phoneCountryCode, orgForm.phone);
+    if (phoneError) { setError(phoneError); return; }
     setIsSavingOrg(true);
     setError('');
     setSuccess('');
@@ -162,13 +167,14 @@ function ConfiguracionContent() {
         taxId: orgForm.taxId.trim() || undefined,
         timezone: orgForm.timezone,
         address: orgForm.address.trim() || undefined,
-        phone: orgForm.phone.trim() || undefined,
+        phone: joinPhone(orgForm.phoneCountryCode, orgForm.phone) || undefined,
         email: orgForm.email.trim() || undefined,
         // Se manda siempre, incluso vacío: vaciar las condiciones es una acción
         // legítima y el backend distingue "ausente" de "vacío".
         advanceSaleTerms: orgForm.advanceSaleTerms,
       });
-      setSuccess('Datos de la empresa guardados. Recarga para ver el cambio de zona horaria en todas las pantallas.');
+      setProfileLocked(true);
+      setSuccess('Datos de la empresa guardados y bloqueados. Recarga para ver el cambio de zona horaria en todas las pantallas.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'No se pudieron guardar los datos');
     } finally {
@@ -253,8 +259,8 @@ function ConfiguracionContent() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Configuración"
-        description="Datos de la empresa y horario de atención"
+        title={tab === 'horario' ? 'Horario laboral' : 'Datos de la empresa'}
+        description={tab === 'horario' ? 'Define los días y horas en que tu equipo puede entrar y operar.' : 'Información de tu empresa. Se imprime en los comprobantes de venta.'}
       />
 
       {error && (
@@ -264,145 +270,126 @@ function ConfiguracionContent() {
         <div className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">{success}</div>
       )}
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="general">Datos de la empresa</TabsTrigger>
-          <TabsTrigger value="horario">Horario laboral</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="general" className="space-y-6">
+      {tab === 'general' && (
+<div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Información de la empresa
-              </CardTitle>
-              <CardDescription>
-                Estos datos se imprimen en los comprobantes de venta.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="org-name">Nombre *</Label>
-                  <Input
-                    id="org-name"
-                    value={orgForm.name}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, name: e.target.value }))}
-                    disabled={!canWriteSettings}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-taxid">NIT</Label>
-                  <Input
-                    id="org-taxid"
-                    className="font-mono"
-                    value={orgForm.taxId}
-                    onChange={(e) =>
-                      setOrgForm((p) => ({ ...p, taxId: e.target.value.toUpperCase() }))
-                    }
-                    disabled={!canWriteSettings}
-                  />
-                </div>
+            <CardContent className="space-y-6 pt-6">
+              <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+                <Lock className="h-4 w-4 shrink-0" />
+                {profileLocked
+                  ? 'Los datos de la empresa ya fueron registrados y no se pueden modificar.'
+                  : 'Completa estos datos con cuidado: al guardar, ya no se podrán modificar.'}
               </div>
+              <FormSection icon={Building2} title="Datos generales">
+                <FormGrid>
+                  <FormField label="Nombre" htmlFor="org-name" required>
+                    <Input
+                      id="org-name"
+                      value={orgForm.name}
+                      onChange={(e) => setOrgForm((p) => ({ ...p, name: e.target.value }))}
+                      disabled={!canEditOrg}
+                    />
+                  </FormField>
+                  <FormField label="NIT" htmlFor="org-taxid">
+                    <Input
+                      id="org-taxid"
+                      className="font-mono"
+                      value={orgForm.taxId}
+                      onChange={(e) =>
+                        setOrgForm((p) => ({ ...p, taxId: e.target.value.toUpperCase() }))
+                      }
+                      disabled={!canEditOrg}
+                    />
+                  </FormField>
+                </FormGrid>
+              </FormSection>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="org-phone">Teléfono</Label>
-                  <Input
+              <FormSection icon={PhoneIcon} title="Contacto">
+                <FormGrid>
+                  <PhoneField
                     id="org-phone"
-                    value={orgForm.phone}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, phone: e.target.value }))}
-                    disabled={!canWriteSettings}
+                    label="Teléfono"
+                    code={orgForm.phoneCountryCode}
+                    number={orgForm.phone}
+                    onChange={(code, number) =>
+                      setOrgForm((p) => ({ ...p, phoneCountryCode: code, phone: number }))
+                    }
+                    disabled={!canEditOrg}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-email">Correo</Label>
+                  <FormField label="Correo" htmlFor="org-email">
+                    <Input
+                      id="org-email"
+                      type="email"
+                      value={orgForm.email}
+                      onChange={(e) => setOrgForm((p) => ({ ...p, email: e.target.value }))}
+                      disabled={!canEditOrg}
+                    />
+                  </FormField>
+                </FormGrid>
+              </FormSection>
+
+              <FormSection icon={PinIcon} title="Ubicación">
+                <FormField label="Dirección" htmlFor="org-address">
                   <Input
-                    id="org-email"
-                    type="email"
-                    value={orgForm.email}
-                    onChange={(e) => setOrgForm((p) => ({ ...p, email: e.target.value }))}
-                    disabled={!canWriteSettings}
+                    id="org-address"
+                    value={orgForm.address}
+                    onChange={(e) => setOrgForm((p) => ({ ...p, address: e.target.value }))}
+                    disabled={!canEditOrg}
                   />
-                </div>
-              </div>
+                </FormField>
+              </FormSection>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-address">Dirección</Label>
-                <Input
-                  id="org-address"
-                  value={orgForm.address}
-                  onChange={(e) => setOrgForm((p) => ({ ...p, address: e.target.value }))}
-                  disabled={!canWriteSettings}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="org-timezone">Zona horaria</Label>
-                <Select
-                  value={orgForm.timezone}
-                  onValueChange={(value) => setOrgForm((p) => ({ ...p, timezone: value }))}
-                  disabled={!canWriteSettings}
+              <FormSection icon={GlobeIcon} title="Regional">
+                <FormField
+                  label="Zona horaria"
+                  htmlFor="org-timezone"
+                  hint="Define cómo se leen todas las fechas del sistema y a qué hora empieza y termina el horario laboral. No es la zona del navegador."
                 >
-                  <SelectTrigger id="org-timezone" className="max-w-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIMEZONES.map((tz) => (
-                      <SelectItem key={tz} value={tz}>
-                        {tz}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Define cómo se leen todas las fechas del sistema y a qué hora empieza y termina el
-                  horario laboral. No es la zona del navegador.
-                </p>
-              </div>
+                  <Select
+                    value={orgForm.timezone}
+                    onValueChange={(value) => setOrgForm((p) => ({ ...p, timezone: value }))}
+                    disabled={!canEditOrg}
+                  >
+                    <SelectTrigger id="org-timezone" className="max-w-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEZONES.map((tz) => (
+                        <SelectItem key={tz} value={tz}>
+                          {tz}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormField>
+              </FormSection>
 
-              <div className="space-y-2">
-                <Label htmlFor="org-terms">Condiciones de venta adelantada</Label>
-                <Textarea
-                  id="org-terms"
-                  rows={4}
-                  value={orgForm.advanceSaleTerms}
-                  onChange={(e) => setOrgForm((p) => ({ ...p, advanceSaleTerms: e.target.value }))}
-                  placeholder="Ej: El anticipo no es reembolsable. La entrega se realiza contra pago del saldo."
-                  disabled={!canWriteSettings}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Se imprime en el comprobante cuando la venta tiene entrega pendiente.
-                </p>
-              </div>
 
-              <div className="flex justify-end">
-                <Button onClick={handleSaveOrg} disabled={!canWriteSettings || isSavingOrg}>
+              {!profileLocked && (
+<div className="flex justify-end border-t pt-4">
+                <Button
+                  onClick={handleSaveOrg}
+                  disabled={!canWriteSettings || isSavingOrg}
+                  className="min-w-[140px]"
+                >
                   {isSavingOrg ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
                     <Save className="mr-2 h-4 w-4" />
                   )}
-                  Guardar
+                  Guardar cambios
                 </Button>
               </div>
+)}
             </CardContent>
           </Card>
-        </TabsContent>
+        </div>
+)}
 
-        <TabsContent value="horario" className="space-y-6">
+        {tab === 'horario' && (
+<div className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Horario laboral
-              </CardTitle>
-              <CardDescription>
-                Fuera de este horario nadie puede iniciar sesión ni seguir operando.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
               {schedule && (
                 <>
                   {/* Estado en vivo: configurar el horario sin ver el efecto era
@@ -545,7 +532,7 @@ function ConfiguracionContent() {
                     <button
                       type="button"
                       className="underline underline-offset-2"
-                      onClick={() => setTab('general')}
+                      onClick={() => router.push('/mi-tienda/configuracion?tab=general')}
                     >
                       Cambiarla en Datos de la empresa
                     </button>
@@ -643,8 +630,8 @@ function ConfiguracionContent() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+)}
 
       {/* El mismo aviso que ve el empleado al intentar entrar fuera de hora. */}
       <AlertDialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>

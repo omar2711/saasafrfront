@@ -1,5 +1,6 @@
 'use client';
 
+import { taxLabelFromTotals } from '@/lib/format';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, Receipt as ReceiptIcon, FileText } from 'lucide-react';
@@ -132,7 +133,7 @@ export function SaleReceiptDialog({ isOpen, sale, formatCurrency, onClose }: Sal
       <div className="border-t border-dashed border-current my-1.5" />
       <div className="flex justify-between"><span>Cant. productos</span><span>{totalUnits}</span></div>
       <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(sale.subtotal)}</span></div>
-      <div className="flex justify-between"><span>IT (13%)</span><span>{formatCurrency(sale.tax)}</span></div>
+      {sale.tax > 0 && <div className="flex justify-between"><span>{taxLabelFromTotals(sale.total, sale.tax)}</span><span>{formatCurrency(sale.tax)}</span></div>}
       <div className="border-t border-dashed border-current my-1.5" />
       <div className="flex justify-between font-bold text-sm"><span>TOTAL</span><span>{formatCurrency(sale.total)}</span></div>
       {hasDeposit && (
@@ -263,10 +264,12 @@ export function SaleReceiptDialog({ isOpen, sale, formatCurrency, onClose }: Sal
           <span className="text-muted-foreground">Subtotal</span>
           <span>{formatCurrency(sale.subtotal)}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">IT (13%)</span>
-          <span>{formatCurrency(sale.tax)}</span>
-        </div>
+        {sale.tax > 0 && (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{taxLabelFromTotals(sale.total, sale.tax)}</span>
+            <span>{formatCurrency(sale.tax)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm font-bold border-t pt-1 mt-1">
           <span>Total</span>
           <span>{formatCurrency(sale.total)}</span>

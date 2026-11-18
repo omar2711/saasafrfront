@@ -1,16 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { SlidersHorizontal } from 'lucide-react';
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormField } from '@/components/form-layout';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -123,111 +117,95 @@ export function ProductStockAdjustDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {lockedKind === 'baja' ? 'Registrar baja' : 'Ajustar stock'} - {product.name}
-          </DialogTitle>
-          <DialogDescription>
-            Stock actual: <span className="font-bold">{currentStock}</span> {product.unit}
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={isOpen}
+      onOpenChange={(open) => !open && onCancel()}
+      icon={SlidersHorizontal}
+      title={`${lockedKind === 'baja' ? 'Registrar baja' : 'Ajustar stock'} - ${product.name}`}
+      description={`Stock actual: ${currentStock} ${product.unit}`}
+      size="md"
+      submitLabel={adjustType === 'baja' ? 'Confirmar baja' : 'Confirmar ajuste'}
+      onSubmit={handleSubmit}
+      isSubmitting={isSubmitting}
+    >
+      <FormSection icon={SlidersHorizontal} title="Movimiento">
+        {!lockedKind && (
+          <FormField label="Tipo de movimiento" htmlFor="type" required>
+            <Select value={adjustType} onValueChange={(val) => setAdjustType(val as StockAdjustKind)}>
+              <SelectTrigger id="type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(KIND_LABELS) as StockAdjustKind[]).map((kind) => (
+                  <SelectItem key={kind} value={kind}>{KIND_LABELS[kind]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        )}
 
-        <div className="space-y-4">
-          {!lockedKind && (
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo de movimiento *</Label>
-              <Select value={adjustType} onValueChange={(val) => setAdjustType(val as StockAdjustKind)}>
-                <SelectTrigger id="type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(KIND_LABELS) as StockAdjustKind[]).map((kind) => (
-                    <SelectItem key={kind} value={kind}>{KIND_LABELS[kind]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+        {adjustType === 'ajuste' && (
+          <FormField label="Dirección del ajuste" htmlFor="direction" required>
+            <Select value={direction} onValueChange={(val) => setDirection(val as 'increase' | 'decrease')}>
+              <SelectTrigger id="direction">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="increase">Aumentar stock</SelectItem>
+                <SelectItem value="decrease">Disminuir stock</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormField>
+        )}
 
-          {adjustType === 'ajuste' && (
-            <div className="space-y-2">
-              <Label htmlFor="direction">Direccion del ajuste *</Label>
-              <Select value={direction} onValueChange={(val) => setDirection(val as 'increase' | 'decrease')}>
-                <SelectTrigger id="direction">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="increase">Aumentar stock</SelectItem>
-                  <SelectItem value="decrease">Disminuir stock</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+        <FormField label="Cantidad" htmlFor="quantity" required error={errors.quantity}>
+          <Input
+            id="quantity"
+            type="number"
+            min="1"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="Ingresa la cantidad"
+            aria-invalid={Boolean(errors.quantity)}
+            className={errors.quantity ? 'border-destructive' : ''}
+          />
+        </FormField>
+      </FormSection>
 
-          <div className="space-y-2">
-            <Label htmlFor="quantity">Cantidad *</Label>
-            <Input
-              id="quantity"
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="Ingresa la cantidad"
-              className={errors.quantity ? 'border-red-500' : ''}
-            />
-            {errors.quantity && <p className="text-xs text-red-500">{errors.quantity}</p>}
-          </div>
+      <FormSection icon={SlidersHorizontal} title="Detalle">
+        <FormField label="Motivo / referencia" htmlFor="reason" required error={errors.reason}>
+          <Textarea
+            id="reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={
+              adjustType === 'baja'
+                ? 'Ej: Producto dañado en almacén, caja mojada, vencido...'
+                : 'Ej: Devolución cliente, merma, error de inventario...'
+            }
+            aria-invalid={Boolean(errors.reason)}
+            className={`resize-none ${errors.reason ? 'border-destructive' : ''}`}
+            rows={3}
+          />
+        </FormField>
 
-          <div className="space-y-2">
-            <Label htmlFor="reason">Motivo / referencia *</Label>
-            <Textarea
-              id="reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={
-                adjustType === 'baja'
-                  ? 'Ej: Producto dañado en almacen, caja mojada, vencido...'
-                  : 'Ej: Devolucion cliente, merma, error de inventario...'
-              }
-              className={`resize-none ${errors.reason ? 'border-red-500' : ''}`}
-              rows={3}
-            />
-            {errors.reason && <p className="text-xs text-red-500">{errors.reason}</p>}
-          </div>
-
-          <div className="rounded-lg border bg-muted/50 p-3">
-            <p className="text-sm text-muted-foreground">
-              Stock actual: <span className="font-bold">{currentStock}</span>
+        <div className="rounded-lg border bg-muted/50 p-3">
+          <p className="text-sm text-muted-foreground">
+            Stock actual: <span className="font-bold">{currentStock}</span>
+          </p>
+          {hasValidQuantity && (
+            <p className="mt-2 text-sm">
+              Nuevo stock:
+              <span className={`ml-2 font-bold ${isNegative ? 'text-red-600' : 'text-green-600'}`}>
+                {nextStock}
+              </span>
+              <span className="ml-2 text-muted-foreground">
+                ({isNegative ? '−' : '+'}{parsedQuantity})
+              </span>
             </p>
-            {hasValidQuantity && (
-              <p className="text-sm mt-2">
-                Nuevo stock:
-                <span className={`font-bold ml-2 ${isNegative ? 'text-red-600' : 'text-green-600'}`}>
-                  {nextStock}
-                </span>
-                <span className="text-muted-foreground ml-2">
-                  ({isNegative ? '−' : '+'}{parsedQuantity})
-                </span>
-              </p>
-            )}
-          </div>
+          )}
         </div>
-
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting
-              ? 'Guardando...'
-              : adjustType === 'baja'
-                ? 'Confirmar baja'
-                : 'Confirmar ajuste'}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </FormSection>
+    </FormDialog>
   );
 }

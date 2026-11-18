@@ -1,5 +1,6 @@
 'use client';
 
+import { taxLabelFromTotals } from '@/lib/format';
 import { type QuoteDto } from '@/lib/api/quotes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,13 +17,13 @@ interface QuotationPreviewProps {
 export function QuotationPreview({
   quote,
   companyName = 'Mi Tienda',
-  companyTax = 'RFC: ABC123456789',
-  companyPhone = '+52 55 1234 5678',
+  companyTax,
+  companyPhone,
 }: QuotationPreviewProps) {
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-MX', {
+    return new Intl.NumberFormat('es-BO', {
       style: 'currency',
-      currency: 'MXN',
+      currency: 'BOB',
       minimumFractionDigits: 2,
     }).format(value);
   };
@@ -56,8 +57,8 @@ export function QuotationPreview({
         <div className="flex justify-between items-start mb-8 pb-8 border-b">
           <div>
             <h1 className="text-3xl font-bold">{companyName}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{companyTax}</p>
-            <p className="text-sm text-muted-foreground">{companyPhone}</p>
+            {companyTax && <p className="text-sm text-muted-foreground mt-1">NIT: {companyTax}</p>}
+            {companyPhone && <p className="text-sm text-muted-foreground">Tel: {companyPhone}</p>}
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-primary">PRESUPUESTO</div>
@@ -88,6 +89,15 @@ export function QuotationPreview({
           <div className="text-sm font-semibold text-muted-foreground mb-2">CLIENTE</div>
           <div className="space-y-1">
             <div className="font-semibold">{quote.clientName}</div>
+            {quote.clientCompany && (
+              <div className="text-sm text-muted-foreground">{quote.clientCompany}</div>
+            )}
+            {quote.clientNit && (
+              <div className="text-sm text-muted-foreground">CI/NIT: {quote.clientNit}</div>
+            )}
+            {quote.clientAddress && (
+              <div className="text-sm text-muted-foreground">Dirección: {quote.clientAddress}</div>
+            )}
             {quote.clientPhone && (
               <div className="text-sm text-muted-foreground">Tel: {quote.clientPhone}</div>
             )}
@@ -113,8 +123,9 @@ export function QuotationPreview({
               {(quote.items ?? []).map((item, index) => (
                 <tr key={index} className="border-b border-muted">
                   <td className="py-3 px-2">
-                    <div className="font-medium">Producto</div>
-                    <div className="text-xs text-muted-foreground">Cantidad: {item.quantity}</div>
+                    <div className="font-medium">
+                      {item.productName ?? item.kitName ?? (item.kitId ? 'Kit' : 'Producto')}
+                    </div>
                   </td>
                   <td className="text-right py-3 px-2">{item.quantity}</td>
                   <td className="text-right py-3 px-2 font-medium">{formatCurrency(item.unitPrice)}</td>
@@ -142,10 +153,12 @@ export function QuotationPreview({
                   <td className="text-right py-2 font-medium">-{formatCurrency(quote.discountTotal)}</td>
                 </tr>
               )}
+              {quote.taxTotal > 0 && (
               <tr className="border-b">
-                <td className="py-2 text-muted-foreground">IVA (16%)</td>
+                <td className="py-2 text-muted-foreground">{taxLabelFromTotals(quote.total, quote.taxTotal)}</td>
                 <td className="text-right py-2 font-medium">{formatCurrency(quote.taxTotal)}</td>
               </tr>
+              )}
               <tr className="border-b-2 border-foreground text-base">
                 <td className="py-3 font-bold">TOTAL</td>
                 <td className="text-right py-3 font-bold text-lg text-primary">

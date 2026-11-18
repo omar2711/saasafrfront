@@ -1,16 +1,22 @@
 'use client';
 
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { FormDialog } from '@/components/form-dialog';
+import { ShieldCheck as AccessIcon, UserRound as AccountIcon } from 'lucide-react';
+
+import { PhoneField } from '@/components/phone-field';
+import { joinPhone, splitPhone, validatePhone } from '@/lib/utils/phone';
+import { DEFAULT_DIAL_CODE } from '@/lib/data/country-codes';
+
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, MoreHorizontal, UserPlus, Loader2 } from 'lucide-react';
+import { Search, MoreHorizontal, UserPlus, Loader2, CheckCircle2, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,6 +69,7 @@ interface UserFormState {
   fullName: string;
   email: string;
   password: string;
+  phoneCountryCode: string;
   phone: string;
   /** NIT/CI. Vive en la membresía, no en la cuenta: ver migración 031. */
   taxId: string;
@@ -72,6 +79,7 @@ const EMPTY_FORM: UserFormState = {
   fullName: '',
   email: '',
   password: '',
+  phoneCountryCode: DEFAULT_DIAL_CODE,
   phone: '',
   taxId: '',
 };
@@ -92,6 +100,16 @@ export default function UsersPage() {
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState<{ title: string; description: string } | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserDto | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -145,7 +163,7 @@ export default function UsersPage() {
       fullName: row.user.fullName,
       email: row.user.email,
       password: '',
-      phone: row.user.phone ?? '',
+      ...splitPhone(row.user.phone),
       taxId: row.membership?.taxId ?? '',
     });
     setSelectedRoleId(row.membership?.roleIds?.[0] ?? NO_ROLE);
@@ -170,6 +188,7 @@ export default function UsersPage() {
   const handleSave = async () => {
     setFormError('');
     if (!form.fullName.trim()) { setFormError('El nombre es requerido'); return; }
+    if (validatePhone(form.phoneCountryCode, form.phone)) { setFormError('Revisa el teléfono'); return; }
     if (!editingUser && !form.email.trim()) { setFormError('El email es requerido'); return; }
     if (!editingUser && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       setFormError('El email no tiene un formato válido');
@@ -188,7 +207,7 @@ export default function UsersPage() {
       if (editingUser) {
         await usersApi.update(editingUser.id, {
           fullName: form.fullName.trim(),
-          phone: form.phone.trim() || undefined,
+          phone: joinPhone(form.phoneCountryCode, form.phone) || undefined,
         });
         // Actualizar rol y/o sucursal de la membresía si cambiaron
         if (editingMembership) {
@@ -221,13 +240,20 @@ export default function UsersPage() {
           email: form.email.trim(),
           fullName: form.fullName.trim(),
           password: form.password,
-          phone: form.phone.trim() || undefined,
+          phone: joinPhone(form.phoneCountryCode, form.phone) || undefined,
           roleIds: selectedRoleId === NO_ROLE ? [] : [selectedRoleId],
           branchId: selectedBranchId === NO_BRANCH ? undefined : selectedBranchId,
           taxId: form.taxId.trim() || undefined,
         });
       }
+      const wasCreating = !editingUser;
       setDialogOpen(false);
+      if (wasCreating) {
+        setNotice({
+          title: '¡Usuario creado!',
+          description: `${form.fullName.trim()} ya puede iniciar sesión.`,
+        });
+      }
       await loadData();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'Error al guardar');
@@ -236,12 +262,46 @@ export default function UsersPage() {
     }
   };
 
-  const handleToggleStatus = async (user: UserDto) => {
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
+    setIsDeleting(true);
+    setDeleteError('');
     try {
-      await usersApi.setStatus(user.id, user.status === 'active' ? 'inactive' : 'active');
+      await usersApi.remove(userToDelete.id);
+      const deletedName = userToDelete.fullName;
+      setUserToDelete(null);
+      setNotice({ title: '¡Usuario eliminado!', description: `${deletedName} ya no tiene acceso.` });
       await loadData();
-    } catch {
-      // ignore — could show toast
+    } catch (err: unknown) {
+      setDeleteError(
+        err instanceof Error && err.message ? err.message : 'No se pudo eliminar el usuario',
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleToggleStatus = async (user: UserDto) => {
+    const nextStatus = user.status === 'active' ? 'disabled' : 'active';
+
+    try {
+      await usersApi.setStatus(user.id, nextStatus);
+      await loadData();
+
+      setNotice({
+        title: nextStatus === 'active'
+          ? '¡Usuario activado!'
+          : '¡Usuario desactivado!',
+        description: nextStatus === 'active'
+          ? `${user.fullName} ya puede iniciar sesión.`
+          : `${user.fullName} ya no tiene acceso.`,
+      });
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'No se pudo cambiar el estado del usuario.',
+      );
     }
   };
 
@@ -263,129 +323,167 @@ export default function UsersPage() {
         </Button>
       </PageHeader>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        icon={UserPlus}
+        title={editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
+        description="Datos de la cuenta y acceso a la organización."
+        submitLabel={editingUser ? 'Guardar cambios' : 'Crear usuario'}
+        onSubmit={handleSave}
+        isSubmitting={isSaving}
+        error={formError}
+      >
+        <FormSection icon={AccountIcon} title="Datos de la cuenta">
+          <FormGrid>
+            <FormField label="Nombre completo" required className="sm:col-span-2">
+              <Input
+                value={form.fullName}
+                onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+                placeholder="Juan Pérez"
+              />
+            </FormField>
+            {!editingUser && (
+              <>
+                <FormField label="Email" required>
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="usuario@empresa.com"
+                  />
+                </FormField>
+                <FormField label="Contraseña" required hint="Mínimo 8 caracteres">
+                  <Input
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                </FormField>
+              </>
+            )}
+            <div className="sm:col-span-2">
+              <PhoneField
+                id="user-phone"
+                label="Teléfono (opcional)"
+                code={form.phoneCountryCode}
+                number={form.phone}
+                onChange={(code, number) =>
+                  setForm((f) => ({ ...f, phoneCountryCode: code, phone: number }))
+                }
+                showError={Boolean(formError)}
+              />
+            </div>
+          </FormGrid>
+        </FormSection>
+
+        {/* Antes este bloque entero sólo se mostraba al editar, así que todo
+            usuario nacía sin rol y sin sucursal: entraba y no veía nada. */}
+        <FormSection icon={AccessIcon} title="Acceso a la organización">
+          <FormGrid>
+            <FormField
+              label="Rol"
+              required
+              hint="El rol decide qué puede hacer. Sin rol, el usuario entra y no ve nada."
+              className="sm:col-span-2"
+            >
+              <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_ROLE}>Sin rol</SelectItem>
+                  {roles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField
+              label="Sucursal asignada"
+              hint={
+                branchWarning
+                  ? undefined
+                  : 'Si el rol no tiene permiso “Ver todas las sucursales”, el usuario solo verá esta.'
+              }
+              className="sm:col-span-2"
+            >
+              <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin sucursal" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_BRANCH}>Todas (sin asignar)</SelectItem>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {branchWarning && <p className="text-xs text-amber-700">{branchWarning}</p>}
+            </FormField>
+            <FormField
+              label="NIT / CI (opcional)"
+              hint="Único dentro de esta organización. No se comparte con otras empresas."
+              className="sm:col-span-2"
+            >
+              <Input
+                className="font-mono"
+                value={form.taxId}
+                onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value.toUpperCase() }))}
+                placeholder="1234567"
+              />
+            </FormField>
+          </FormGrid>
+        </FormSection>
+      </FormDialog>
+
+      <Dialog
+        open={!!userToDelete}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setUserToDelete(null);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-5 pt-2">
-            <section className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Datos de la cuenta
-              </h3>
-              <div className="space-y-1.5">
-                <Label>Nombre completo *</Label>
-                <Input
-                  value={form.fullName}
-                  onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
-                  placeholder="Juan Pérez"
-                />
-              </div>
-              {!editingUser && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label>Email *</Label>
-                    <Input
-                      type="email"
-                      value={form.email}
-                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                      placeholder="usuario@empresa.com"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Contraseña *</Label>
-                    <Input
-                      type="password"
-                      value={form.password}
-                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                      placeholder="Mínimo 8 caracteres"
-                    />
-                  </div>
-                </>
-              )}
-              <div className="space-y-1.5">
-                <Label>Teléfono (opcional)</Label>
-                <Input
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="+591 7XXXXXXX"
-                />
-              </div>
-            </section>
-
-            {/* Antes este bloque entero sólo se mostraba al editar, así que todo
-                usuario nacía sin rol y sin sucursal: entraba y no veía nada. */}
-            <Separator />
-
-            <section className="space-y-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Acceso a la organización
-              </h3>
-              <div className="space-y-1.5">
-                <Label>Rol *</Label>
-                <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_ROLE}>Sin rol</SelectItem>
-                    {roles.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  El rol decide qué puede hacer. Sin rol, el usuario entra y no ve nada.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Sucursal asignada</Label>
-                <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sin sucursal" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NO_BRANCH}>Todas (sin asignar)</SelectItem>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {branchWarning ? (
-                  <p className="text-xs text-amber-700">{branchWarning}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Si el rol no tiene permiso “Ver todas las sucursales”, el usuario solo verá esta.
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label>NIT / CI (opcional)</Label>
-                <Input
-                  className="font-mono"
-                  value={form.taxId}
-                  onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value.toUpperCase() }))}
-                  placeholder="1234567"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Único dentro de esta organización. No se comparte con otras empresas.
-                </p>
-              </div>
-            </section>
-
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingUser ? 'Guardar' : 'Crear'}
-              </Button>
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 ring-8 ring-red-50">
+              <Trash2 className="h-7 w-7 text-red-600" />
             </div>
+            <DialogTitle className="text-center">¿Eliminar este usuario?</DialogTitle>
+          </DialogHeader>
+          <p className="text-center text-sm text-muted-foreground">
+            Vas a eliminar a{' '}
+            <span className="font-medium text-foreground">{userToDelete?.fullName}</span>{' '}
+            ({userToDelete?.email}). Esta acción no se puede deshacer.
+          </p>
+          {deleteError && (
+            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {deleteError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setUserToDelete(null)} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Eliminar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {notice && (
+        <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/20 p-4 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-3xl border bg-card p-8 text-center text-card-foreground shadow-2xl animate-in zoom-in-90 duration-300">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 ring-8 ring-emerald-50">
+              <CheckCircle2 className="h-9 w-9 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold">{notice.title}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{notice.description}</p>
+          </div>
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -483,6 +581,17 @@ export default function UsersPage() {
                           <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
                             {user.status === 'active' ? 'Desactivar' : 'Activar'}
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => {
+                              setDeleteError('');
+                              setUserToDelete(user);
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Eliminar
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -497,3 +606,5 @@ export default function UsersPage() {
     </div>
   );
 }
+
+

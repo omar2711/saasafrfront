@@ -104,11 +104,64 @@ export function toDateInputValue(value: DateInput = new Date()): string {
   return parts;
 }
 
+let currentTaxName = 'IVA';
+
+/** Nombre del impuesto configurado (IVA, IGV, ...); lo fija la configuracion de la empresa. */
+export function setTaxName(name: string | null | undefined): void {
+  currentTaxName = name && name.trim() ? name.trim() : 'IVA';
+}
+
+export function getTaxName(): string {
+  return currentTaxName;
+}
+
+/**
+ * Etiqueta del impuesto de un comprobante, por ejemplo "IVA (13%)". El porcentaje se
+ * deduce de los montos del propio comprobante (total e impuesto): una venta antigua
+ * conserva el porcentaje con el que se cobro aunque despues cambie la configuracion.
+ */
+export function taxLabelFromTotals(total: number, tax: number): string {
+  const base = total - tax;
+  if (!(tax > 0) || !(base > 0)) return currentTaxName;
+  const rate = Math.round((tax / base) * 10000) / 100;
+  return `${currentTaxName} (${formatNumber(rate, 2)}%)`;
+}
+const CURRENCY_CODE_RE = /^[A-Z]{3}$/;
+let currentCurrency = 'BOB';
+
+/** Moneda con la que trabaja el sistema; la fija la configuracion de la empresa. */
+export function setBaseCurrency(code: string | null | undefined): void {
+  currentCurrency = code && CURRENCY_CODE_RE.test(code) ? code : 'BOB';
+}
+
+export function getBaseCurrency(): string {
+  return currentCurrency;
+}
+
+/** Formatea un monto en una moneda concreta (por defecto, la del sistema). */
+export function formatMoney(
+  value: number | null | undefined,
+  currency: string = currentCurrency,
+  fractionDigits = 2,
+): string {
+  const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  try {
+    return new Intl.NumberFormat(LOCALE, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(fractionDigits)} ${currency}`;
+  }
+}
+
 export function formatCurrency(value: number | null | undefined, fractionDigits = 2): string {
   const amount = typeof value === 'number' && Number.isFinite(value) ? value : 0;
   return new Intl.NumberFormat(LOCALE, {
     style: 'currency',
-    currency: 'BOB',
+    currency: currentCurrency,
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount);

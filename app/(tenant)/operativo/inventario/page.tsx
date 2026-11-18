@@ -1,7 +1,9 @@
 'use client';
+import { getBaseCurrency } from '@/lib/format';
+import { useSuccessNotice } from '@/components/success-notice';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, MoreHorizontal, Package, Upload, Download, Eye, Edit, Settings, History, Trash2 } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Package, Upload, Download, Eye, Edit, History, Trash2, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +12,13 @@ import { StatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { ProductFormDialog } from '@/components/product-form-dialog';
 import { ProductDetailsDialog } from '@/components/product-details-dialog';
-import { ProductStockAdjustDialog, type StockAdjustPayload } from '@/components/product-stock-adjust-dialog';
 import { ProductMovementsDialog } from '@/components/product-movements-dialog';
 import { WriteOffsTab } from '@/components/write-offs-tab';
 import { CategoriesTab } from '@/components/categories-tab';
 import { TransfersTab } from '@/components/transfers-tab';
 import { BranchPricesTab } from '@/components/branch-prices-tab';
 import { DeletedProductsTab } from '@/components/deleted-products-tab';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { KitsTab } from '@/components/kits-tab';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -51,10 +53,26 @@ interface StockRow {
   product?: ProductDto;
 }
 
+function expiryCell(date?: string | null) {
+  if (!date) return <span className="text-muted-foreground">-</span>;
+  const [y, m, d] = date.split('-').map(Number);
+  const days = Math.round((new Date(y, m - 1, d).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
+  const label = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+  if (days < 0) return <span className="text-red-600 font-medium">{label} (vencido)</span>;
+  if (days <= 30) return <span className="text-orange-600 font-medium">{label} ({days} d)</span>;
+  return <span>{label}</span>;
+}
 export default function InventoryPage() {
   const { currentBranch, hasPermission } = useOrganization();
+  const { showNotice, noticeElement } = useSuccessNotice();
   const canViewPricing = hasPermission('products.pricing');
   const [rows, setRows] = useState<StockRow[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<{ product: ProductDto; quantity: number } | null>(null);
+  const [deleteMode, setDeleteMode] = useState<'all' | 'partial'>('all');
+  const [deleteQty, setDeleteQty] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState('inventario');
   const [productMap, setProductMap] = useState<Record<string, ProductDto>>({});
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,8 +84,6 @@ export default function InventoryPage() {
   const [editingProduct, setEditingProduct] = useState<(ProductDto & { minStock?: number }) | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [selectedDetailsProduct, setSelectedDetailsProduct] = useState<ProductDto | null>(null);
-  const [selectedAdjustProduct, setSelectedAdjustProduct] = useState<ProductDto | null>(null);
-  const [isAdjusting, setIsAdjusting] = useState(false);
   const [selectedMovementsProduct, setSelectedMovementsProduct] = useState<ProductDto | null>(null);
 
   const loadData = async () => {
@@ -95,7 +111,7 @@ export default function InventoryPage() {
   }, [currentBranch]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   // Las opciones se derivan de `rows` (lo que realmente se muestra: el stock de la
   // sucursal actual) y no de todo el catalogo de la organizacion, para que ningun
@@ -142,6 +158,8 @@ export default function InventoryPage() {
     try {
       const created = await productsApi.create({
         sku: formData.sku,
+        minSalePrice: formData.minSalePrice,
+        maxSalePrice: formData.maxSalePrice,
         name: formData.name,
         categoryId: formData.categoryId,
         description: formData.description,
@@ -150,9 +168,27 @@ export default function InventoryPage() {
         unit: formData.unit,
         image: formData.image,
         minStock: formData.minStock,
+        expirationDate: formData.expirationDate,
         branchId: currentBranch?.id,
       });
       setProductMap(prev => ({ ...prev, [created.id]: created }));
+      showNotice({ title: '¡Producto creado!', description: `El producto "${created.name}" se agregó al catálogo.` });
+      let initialQty = 0;
+      if (currentBranch && Number(formData.initialStock) > 0) {
+        try {
+          await inventoryApi.createMovement({
+            branchId: currentBranch.id,
+            productId: created.id,
+            movementType: 'adjustment',
+            quantity: Number(formData.initialStock),
+            unitCost: formData.costPrice || undefined,
+            notes: 'Stock inicial',
+          });
+          initialQty = Number(formData.initialStock);
+        } catch {
+          setErrorMessage('Producto creado, pero no se pudo registrar el stock inicial. Regístralo desde Nuevo Ingreso.');
+        }
+      }
       if (currentBranch) {
         setRows(prev => [...prev, {
           stock: {
@@ -160,7 +196,7 @@ export default function InventoryPage() {
             orgId: created.orgId,
             branchId: currentBranch.id,
             productId: created.id,
-            quantityOnHand: 0,
+            quantityOnHand: initialQty,
             minStock: formData.minStock ?? 0,
             createdAt: created.createdAt,
             updatedAt: created.updatedAt,
@@ -187,8 +223,18 @@ export default function InventoryPage() {
         unit: formData.unit,
         image: formData.image,
         minStock: formData.minStock,
+        expirationDate: formData.expirationDate,
+        status: formData.status,
+        minSalePrice: formData.minSalePrice,
+        maxSalePrice: formData.maxSalePrice,
         branchId: currentBranch?.id,
       });
+      void loadData();
+      if (formData.status && formData.status !== editingProduct.status) {
+        showNotice({ title: formData.status === 'active' ? '¡Producto activado!' : '¡Producto desactivado!', description: `Se actualizó el estado de "${editingProduct.name}".` });
+      } else {
+        showNotice({ title: '¡Producto actualizado!', description: `Los cambios en "${editingProduct.name}" se guardaron.` });
+      }
       applyUpdatedProduct(updated);
       if (currentBranch) {
         setRows(prev => prev.map(r => r.product?.id === updated.id
@@ -202,6 +248,22 @@ export default function InventoryPage() {
     }
   };
 
+  const handleApproveProduct = async (product: ProductDto) => {
+    setErrorMessage('');
+    if (!(product.salePrice > 0)) {
+      // sin precio de venta: abrir el formulario para definirlo
+      setEditingProduct({ ...product, minStock: getMinStock(product.id) });
+      setIsFormOpen(true);
+      return;
+    }
+    try {
+      const updated = await productsApi.update(product.id, { status: 'active' });
+      applyUpdatedProduct(updated);
+    } catch (e: unknown) {
+      setErrorMessage(e instanceof Error ? e.message : 'Error al aprobar producto');
+    }
+  };
+
   const handleToggleProductStatus = async (product: ProductDto) => {
     setErrorMessage('');
     try {
@@ -209,14 +271,64 @@ export default function InventoryPage() {
         status: product.status === 'active' ? 'inactive' : 'active',
       });
       applyUpdatedProduct(updated);
+      showNotice({ title: updated.status === 'active' ? '¡Producto activado!' : '¡Producto desactivado!', description: `"${updated.name}" ahora está ${updated.status === 'active' ? 'activo' : 'inactivo'}.` });
     } catch (e: unknown) {
       setErrorMessage(e instanceof Error ? e.message : 'Error al cambiar estado del producto');
     }
   };
 
-  const handleDeleteProduct = async (product: ProductDto) => {
-    setErrorMessage('');
-    if (!confirm(`¿Eliminar "${product.name}"? Podrás restaurarlo desde la papelera.`)) return;
+  const handleDeleteProduct = (product: ProductDto) => {
+    const quantity = rows.find(r => r.product?.id === product.id)?.stock.quantityOnHand ?? 0;
+    setDeleteMode('all');
+    setDeleteQty('');
+    setDeleteError('');
+    setDeleteTarget({ product, quantity });
+  };
+
+  const closeDelete = () => {
+    if (isDeleting) return;
+    setDeleteTarget(null);
+    setDeleteError('');
+  };
+
+  // "Todo el producto" elimina el producto. "Una cantidad" registra una baja de esas
+  // unidades (queda en la pestaña Bajas); si la cantidad es todo el stock, se elimina el producto.
+  const confirmDeleteProduct = async () => {
+    if (!deleteTarget) return;
+    const { product, quantity: available } = deleteTarget;
+    const qty = parseFloat(deleteQty);
+    setDeleteError('');
+
+    if (deleteMode === 'partial') {
+      if (!(qty > 0)) return setDeleteError('Escribe la cantidad que quieres eliminar');
+      if (qty > available) return setDeleteError(`Solo hay ${available} unidades en stock en esta sucursal`);
+    }
+
+    if (deleteMode === 'partial' && qty < available) {
+      if (!currentBranch) return setDeleteError('Selecciona una sucursal');
+      setIsDeleting(true);
+      try {
+        await inventoryApi.createMovement({
+          branchId: currentBranch.id,
+          productId: product.id,
+          movementType: 'damage',
+          quantity: qty,
+          notes: 'Baja desde Inventario',
+        });
+        setRows(prev => prev.map(r => r.product?.id === product.id
+          ? { ...r, stock: { ...r.stock, quantityOnHand: Math.max(0, r.stock.quantityOnHand - qty) } }
+          : r));
+        setDeleteTarget(null);
+        showNotice({ title: '¡Baja registrada!', description: `Se dieron de baja ${qty} unidades de "${product.name}".` });
+      } catch (e: unknown) {
+        setDeleteError(e instanceof Error && e.message ? e.message : 'No se pudo registrar la baja');
+      } finally {
+        setIsDeleting(false);
+      }
+      return;
+    }
+
+    setIsDeleting(true);
     try {
       await productsApi.delete(product.id);
       setRows(prev => prev.filter(r => r.product?.id !== product.id));
@@ -225,35 +337,17 @@ export default function InventoryPage() {
         delete next[product.id];
         return next;
       });
+      setDeleteTarget(null);
+      showNotice({ title: '¡Producto eliminado!', description: `El producto "${product.name}" ya no existe.` });
     } catch (e: unknown) {
-      setErrorMessage(e instanceof Error ? e.message : 'Error al eliminar producto');
-    }
-  };
-
-  const handleStockAdjust = async ({ quantity, movementType, reason }: StockAdjustPayload) => {
-    if (!selectedAdjustProduct || !currentBranch) return;
-    setErrorMessage('');
-    setIsAdjusting(true);
-    try {
-      await inventoryApi.createMovement({
-        branchId: currentBranch.id,
-        productId: selectedAdjustProduct.id,
-        movementType,
-        quantity,
-        notes: reason,
-      });
-      // El signo se deriva del tipo, igual que en el backend.
-      const delta = NEGATIVE_MOVEMENT_TYPES.includes(movementType) ? -quantity : quantity;
-      setRows(prev => prev.map(r => r.product?.id === selectedAdjustProduct.id
-        ? { ...r, stock: { ...r.stock, quantityOnHand: Math.max(0, r.stock.quantityOnHand + delta) } }
-        : r));
-      setSelectedAdjustProduct(null);
-    } catch (e: unknown) {
-      setErrorMessage(e instanceof Error ? e.message : 'Error al ajustar el stock');
+      setDeleteError(e instanceof Error && e.message ? e.message : 'Error al eliminar producto');
     } finally {
-      setIsAdjusting(false);
+      setIsDeleting(false);
     }
   };
+  const delAvailable = deleteTarget?.quantity ?? 0;
+  const delQtyNum = parseFloat(deleteQty);
+  const delIsPartial = deleteMode === 'partial' && delQtyNum > 0 && delQtyNum < delAvailable;
 
   if (isLoading) {
     return (
@@ -265,6 +359,7 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
+      {noticeElement}
       <PageHeader title="Inventario" description="Catalogo de productos y control de stock">
         <div className="flex gap-2">
           <Button variant="outline">
@@ -275,9 +370,9 @@ export default function InventoryPage() {
             <Download className="mr-2 h-4 w-4" />
             Exportar
           </Button>
-          <Button onClick={() => { setEditingProduct(null); setErrorMessage(''); setIsFormOpen(true); }}>
+          <Button className={activeTab === 'categorias' ? 'hidden' : ''} onClick={() => { setEditingProduct(null); setErrorMessage(''); setIsFormOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
-            Nuevo Producto
+            Agregar producto
           </Button>
         </div>
       </PageHeader>
@@ -290,6 +385,7 @@ export default function InventoryPage() {
         isOpen={isFormOpen}
         editingProduct={editingProduct}
         categories={categories.map(c => ({ id: c.id, name: c.name }))}
+        currentStock={editingProduct ? getStock(editingProduct.id) : undefined}
         onSave={editingProduct ? handleEditProduct : handleCreateProduct}
         onCancel={() => {
           setIsFormOpen(false);
@@ -306,15 +402,6 @@ export default function InventoryPage() {
         onClose={() => setSelectedDetailsProduct(null)}
       />
 
-      <ProductStockAdjustDialog
-        isOpen={!!selectedAdjustProduct}
-        product={selectedAdjustProduct}
-        stock={selectedAdjustProduct ? getStock(selectedAdjustProduct.id) : 0}
-        isSubmitting={isAdjusting}
-        onConfirm={handleStockAdjust}
-        onCancel={() => setSelectedAdjustProduct(null)}
-      />
-
       <ProductMovementsDialog
         isOpen={!!selectedMovementsProduct}
         product={selectedMovementsProduct}
@@ -322,7 +409,86 @@ export default function InventoryPage() {
         onClose={() => setSelectedMovementsProduct(null)}
       />
 
-      <Tabs defaultValue="inventario" className="w-full">
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) closeDelete(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 ring-8 ring-red-50">
+              <Trash2 className="h-7 w-7 text-red-600" />
+            </div>
+            <DialogTitle className="text-center">¿Eliminar este producto?</DialogTitle>
+          </DialogHeader>
+          <p className="text-center text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{deleteTarget?.product.name}</span> tiene{' '}
+            <span className="font-medium text-foreground">{delAvailable} unidades</span> en stock en esta sucursal.
+          </p>
+
+          <div className="grid gap-2" role="radiogroup" aria-label="Qué eliminar">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={deleteMode === 'all'}
+              onClick={() => { setDeleteMode('all'); setDeleteError(''); }}
+              className={`flex flex-col items-start gap-0.5 rounded-lg border p-3 text-left text-sm transition ${deleteMode === 'all' ? 'border-red-500 bg-red-50/60 dark:bg-red-950/20' : 'hover:bg-muted/50'}`}
+            >
+              <span className="font-medium">Eliminar todo el producto</span>
+              <span className="text-xs text-muted-foreground">
+                Se elimina el producto con su stock. Podrás restaurarlo desde la pestaña Eliminados.
+              </span>
+            </button>
+            {(
+              <button
+                type="button"
+                role="radio"
+                aria-checked={deleteMode === 'partial'}
+                disabled={delAvailable <= 0}
+                onClick={() => { setDeleteMode('partial'); setDeleteError(''); }}
+                className={`flex flex-col items-start gap-0.5 rounded-lg border p-3 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${deleteMode === 'partial' ? 'border-red-500 bg-red-50/60 dark:bg-red-950/20' : 'hover:bg-muted/50'}`}
+              >
+                <span className="font-medium">Eliminar solo una cantidad</span>
+                <span className="text-xs text-muted-foreground">
+                  {delAvailable > 0 ? 'El producto se mantiene y se registra una baja de esas unidades.' : 'No hay unidades en stock para dar de baja.'}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {deleteMode === 'partial' && (
+            <div className="space-y-1.5">
+              <label htmlFor="delete-qty" className="text-sm font-medium">Cantidad a eliminar</label>
+              <Input
+                id="delete-qty"
+                type="number"
+                min="0"
+                step="any"
+                autoFocus
+                value={deleteQty}
+                onChange={(e) => { setDeleteQty(e.target.value); setDeleteError(''); }}
+                placeholder={`Máximo ${delAvailable}`}
+              />
+              {delQtyNum >= delAvailable && delQtyNum > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Es todo el stock: se eliminará el producto completo.
+                </p>
+              )}
+            </div>
+          )}
+
+          {deleteError && (
+            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{deleteError}</div>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={closeDelete} disabled={isDeleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteProduct} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {delIsPartial ? 'Dar de baja' : 'Eliminar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList>
           <TabsTrigger value="inventario">Inventario</TabsTrigger>
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
@@ -337,7 +503,7 @@ export default function InventoryPage() {
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="text-2xl font-bold">{rows.length}</div>
+                <div className="text-2xl font-bold">{rows.filter(r => r.product?.status === 'active').length}</div>
                 <p className="text-sm text-muted-foreground">Productos activos</p>
               </CardContent>
             </Card>
@@ -407,25 +573,35 @@ export default function InventoryPage() {
                     <TableHead>Costo</TableHead>
                     <TableHead>Precio Venta</TableHead>
                     <TableHead>Margen</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead>Estado</TableHead>
+                    <TableHead>Cantidad</TableHead>
+                    <TableHead>Stock mín.</TableHead>
+                    <TableHead>Vence</TableHead>
+                <TableHead>Estado</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredRows.map(({ stock, product }) => {
                     if (!product) return null;
-                    const margin = product.costPrice
+                    const margin = product.costPrice && product.salePrice > 0
                       ? ((product.salePrice - product.costPrice) / product.salePrice) * 100
-                      : 0;
+                      : null;
                     const isLowStock = stock.quantityOnHand < stock.minStock;
                     return (
                       <TableRow key={stock.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center">
-                              <Package className="h-5 w-5 text-muted-foreground" />
-                            </div>
+                            {product.imageUrl ? (
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name}
+                                className="h-10 w-10 shrink-0 rounded object-cover"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 shrink-0 rounded bg-muted flex items-center justify-center">
+                                <Package className="h-5 w-5 text-muted-foreground" />
+                              </div>
+                            )}
                             <div>
                               <div className="font-medium">{product.name}</div>
                               <div className="text-sm text-muted-foreground truncate max-w-[200px]">
@@ -440,21 +616,21 @@ export default function InventoryPage() {
                         <TableCell>
                           <Badge
                             variant="secondary"
-                            className={margin > 30 ? 'bg-green-100 text-green-700' : ''}
+                            className={(margin ?? 0) > 30 ? 'bg-green-100 text-green-700' : ''}
                           >
-                            {margin.toFixed(1)}%
+                            {margin === null ? '-' : `${margin.toFixed(0)}%`}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className={isLowStock ? 'text-yellow-600 font-medium' : ''}>
-                              {stock.quantityOnHand}
-                            </span>
-                            <span className="text-muted-foreground text-sm">
-                              / {stock.minStock} min
-                            </span>
-                          </div>
+                          <span className={isLowStock ? 'font-semibold text-yellow-600' : 'font-semibold'}>
+                            {stock.quantityOnHand}
+                          </span>
+                          {product.unit && (
+                            <span className="ml-1 text-sm text-muted-foreground">{product.unit}</span>
+                          )}
                         </TableCell>
+                        <TableCell className="text-muted-foreground">{stock.minStock}</TableCell>
+                        <TableCell>{expiryCell(product.expirationDate)}</TableCell>
                         <TableCell>
                           {isLowStock ? (
                             <StatusBadge status="warning" label="Bajo stock" />
@@ -476,13 +652,9 @@ export default function InventoryPage() {
                                 <Eye className="mr-2 h-4 w-4" />
                                 Ver detalles
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setEditingProduct({ ...product, minStock: getMinStock(product.id) }); setErrorMessage(''); setIsFormOpen(true); }}>
+                              <DropdownMenuItem onClick={() => { if (product.status === 'pending_pricing') { handleApproveProduct(product); return; } setEditingProduct({ ...product, minStock: getMinStock(product.id) }); setErrorMessage(''); setIsFormOpen(true); }}>
                                 <Edit className="mr-2 h-4 w-4" />
-                                Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setSelectedAdjustProduct(product)}>
-                                <Settings className="mr-2 h-4 w-4" />
-                                Ajustar stock
+                                {product.status === 'pending_pricing' ? 'Aprobar' : 'Editar'}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setSelectedMovementsProduct(product)}>
                                 <History className="mr-2 h-4 w-4" />

@@ -1,10 +1,14 @@
 'use client';
 
+import { getBaseCurrency } from '@/lib/format';
+import { FormDialog } from '@/components/form-dialog';
+import { FormSection, FormGrid, FormField } from '@/components/form-layout';
+import { Package as KitIcon, Boxes as KitProductsIcon } from 'lucide-react';
+
 import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Plus, MoreHorizontal, Loader2, Package2, Trash2, ChevronRight, ChevronDown, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,12 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { kitsApi, type KitDto } from '@/lib/api/kits';
 import { productsApi, type ProductDto } from '@/lib/api/products';
 import { useOrganization } from '@/contexts/organization-context';
@@ -87,7 +85,7 @@ export function KitsTab() {
   }, [loadData]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB', minimumFractionDigits: 0 }).format(value);
+    new Intl.NumberFormat('es-BO', { style: 'currency', currency: getBaseCurrency(), minimumFractionDigits: 0 }).format(value);
 
   const openCreate = () => {
     setEditing(null);
@@ -204,114 +202,127 @@ export function KitsTab() {
         <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Kit' : 'Nuevo Kit'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Identificador</Label>
-                <Input value={sku} onChange={(e) => setSku(e.target.value.toUpperCase())} placeholder="KIT-001" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Precio de venta</Label>
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        icon={KitIcon}
+        title={editing ? 'Editar Kit' : 'Nuevo Kit'}
+        description="Un kit agrupa varios productos y se vende a un solo precio."
+        size="xl"
+        submitLabel={editing ? 'Guardar cambios' : 'Crear kit'}
+        onSubmit={handleSave}
+        isSubmitting={isSaving}
+        error={formError || null}
+      >
+        <FormSection icon={KitIcon} title="Datos del kit">
+          <FormGrid>
+            <FormField label="Identificador" htmlFor="kit-sku">
+              <Input
+                id="kit-sku"
+                value={sku}
+                onChange={(e) => setSku(e.target.value.toUpperCase())}
+                placeholder="KIT-001"
+                className="font-mono"
+              />
+            </FormField>
+            <FormField label="Precio de venta" htmlFor="kit-price">
+              <Input
+                id="kit-price"
+                type="number"
+                step="0.01"
+                value={salePrice}
+                onChange={(e) => setSalePrice(e.target.value)}
+                placeholder="0.00"
+              />
+            </FormField>
+            <FormField label="Nombre" htmlFor="kit-name" required className="sm:col-span-2">
+              <Input
+                id="kit-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Combo Oficina Básico"
+              />
+            </FormField>
+            <FormField label="Descripción (opcional)" htmlFor="kit-description" className="sm:col-span-2">
+              <Textarea
+                id="kit-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
+              />
+            </FormField>
+          </FormGrid>
+        </FormSection>
+
+        <FormSection icon={KitProductsIcon} title="Productos componentes">
+          <div className="space-y-2">
+            <div className="hidden items-center gap-2 px-0.5 text-xs font-medium text-muted-foreground sm:flex">
+              <span className="flex-1">Producto</span>
+              <span className="w-24">Cantidad</span>
+              <span className="w-9" />
+            </div>
+            {items.map((item, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <div className="flex-1">
+                  <Select value={item.productId} onValueChange={(v) => updateItem(index, { productId: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Producto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Input
                   type="number"
+                  min="0.01"
                   step="0.01"
-                  value={salePrice}
-                  onChange={(e) => setSalePrice(e.target.value)}
-                  placeholder="0.00"
+                  className="w-24"
+                  value={item.quantity}
+                  onChange={(e) => updateItem(index, { quantity: e.target.value })}
                 />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Nombre</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Combo Oficina Basico" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Descripcion (opcional)</Label>
-              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Productos componentes</Label>
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setItems((prev) => [...prev, { ...EMPTY_ITEM }])}
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Quitar producto"
+                  onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
+                  disabled={items.length === 1}
                 >
-                  <Plus className="mr-1 h-3 w-3" /> Agregar
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-              {items.map((item, index) => (
-                <div key={index} className="flex gap-2 items-center">
-                  <div className="flex-1">
-                    <Select value={item.productId} onValueChange={(v) => updateItem(index, { productId: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Producto" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    className="w-24"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(index, { quantity: e.target.value })}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
-                    disabled={items.length === 1}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              {(() => {
-                const componentsTotal = items.reduce((sum, it) => {
-                  const product = products.find((p) => p.id === it.productId);
-                  const qty = parseFloat(it.quantity) || 0;
-                  return sum + (product?.salePrice ?? 0) * qty;
-                }, 0);
-                const price = parseFloat(salePrice) || 0;
-                const savings = componentsTotal - price;
-                return componentsTotal > 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    Suma de componentes: {formatCurrency(componentsTotal)}
-                    {savings > 0 && (
-                      <span className="text-green-600 ml-1">(ahorro de {formatCurrency(savings)})</span>
-                    )}
-                  </p>
-                ) : null;
-              })()}
-            </div>
-
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editing ? 'Guardar' : 'Crear Kit'}
-              </Button>
-            </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setItems((prev) => [...prev, { ...EMPTY_ITEM }])}
+            >
+              <Plus className="mr-1 h-3 w-3" /> Agregar producto
+            </Button>
+            {(() => {
+              const componentsTotal = items.reduce((sum, it) => {
+                const product = products.find((p) => p.id === it.productId);
+                const qty = parseFloat(it.quantity) || 0;
+                return sum + (product?.salePrice ?? 0) * qty;
+              }, 0);
+              const price = parseFloat(salePrice) || 0;
+              const savings = componentsTotal - price;
+              return componentsTotal > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Suma de componentes: {formatCurrency(componentsTotal)}
+                  {savings > 0 && (
+                    <span className="ml-1 text-green-600">(ahorro de {formatCurrency(savings)})</span>
+                  )}
+                </p>
+              ) : null;
+            })()}
           </div>
-        </DialogContent>
-      </Dialog>
+        </FormSection>
+      </FormDialog>
 
       <Card>
         <CardContent className="p-0">
